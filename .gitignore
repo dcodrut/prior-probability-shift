@@ -1,0 +1,13 @@
+#ignore mnist_dataset
+mnist/mnist_dataset
+
+#ignore my temporary folders
+mnist/_aux
+
+#ignore results folder
+mnist/results
+
+#ignore Jupyter and PyCharm temporary folder
+mnist/.idea
+mnist/.ipynb_checkpoints
+mnist/__pycache__
