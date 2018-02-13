@@ -77,12 +77,10 @@ class Lenet5(object):
         c1_biases = tf.Variable(tf.zeros(conv_layer_1_depth))
         c1 = tf.nn.conv2d(x, c1_weights, strides=[1, 1, 1, 1], padding='SAME') + c1_biases
         c1 = tf.nn.relu(c1)
-        print(c1.get_shape().as_list())
 
         s2 = tf.nn.max_pool(c1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
         # s2 = tf.nn.dropout(s2, self.keep_prob, seed=self.mnist_dataset.train.seed)
 
-        print(s2.get_shape().as_list())
 
         c3_weights = tf.Variable(
             tf.truncated_normal(shape=(patch_size, patch_size, conv_layer_1_depth, conv_layer_2_depth), mean=mu,
@@ -90,20 +88,16 @@ class Lenet5(object):
         c3_biases = tf.Variable(tf.zeros(conv_layer_2_depth))
         c3 = tf.nn.conv2d(s2, c3_weights, strides=[1, 1, 1, 1], padding='VALID') + c3_biases
         c3 = tf.nn.relu(c3)
-        print(c3.get_shape().as_list())
 
         s4 = tf.nn.max_pool(c3, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
         # s4 = tf.nn.dropout(s4, self.keep_prob, seed=self.mnist_dataset.train.seed)
-        print(s4.get_shape().as_list())
         s4_flatten = flatten(s4)
-        print(s4_flatten.get_shape().as_list())
 
         f5_weights = tf.Variable(tf.truncated_normal(shape=(fc_layer_1_size, fc_layer_2_size), mean=mu, stddev=sigma))
         f5_biases = tf.Variable(tf.zeros(fc_layer_2_size))
         f5 = tf.matmul(s4_flatten, f5_weights) + f5_biases
         f5 = tf.nn.relu(f5)
         f5 = tf.nn.dropout(f5, self.keep_prob, seed = self.mnist_dataset.train.seed)
-        print(f5.get_shape().as_list())
 
         f6_weights = tf.Variable(tf.truncated_normal(shape=(fc_layer_2_size, fc_layer_3_size), mean=mu, stddev=sigma))
         f6_biases = tf.Variable(tf.zeros(fc_layer_3_size))
@@ -116,7 +110,6 @@ class Lenet5(object):
         output_biases = tf.Variable(tf.zeros(self.label_size))
         logits = tf.matmul(f6, output_weights) + output_biases
 
-        print(logits.get_shape().as_list())
         return logits
 
     def eval_data(self, dataset):
