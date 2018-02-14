@@ -19,7 +19,7 @@ class Dataset(object):
         # the following variables are used to generate a batch w.r.t. a given label distribution
         self._index_in_epoch = 0
         self._indices_in_epoch = np.zeros(num_classes, np.int32)
-        self._indices_per_class = np.arange(num_classes) == labels[:, np.newaxis]
+        self._indices_per_class = np.arange(num_classes) == np.argmax(labels, axis=1)[:, np.newaxis]
         self._counts_per_class = np.sum(self._indices_per_class, axis=0)
 
     @property
@@ -41,6 +41,10 @@ class Dataset(object):
     @property
     def num_classes(self):
         return self._num_classes
+
+    @property
+    def counts_per_class(self):
+        return self._counts_per_class
 
     @staticmethod
     def reset_rg():
@@ -75,6 +79,9 @@ class Dataset(object):
             end = self._index_in_epoch
             return self._images[start:end], self._labels[start:end]
         else:
+            # make sure that weights sum to 1
+            weights = np.array(weights)
+            weights = weights / sum(weights)
             start_indices = np.empty_like(self._indices_in_epoch)
             np.copyto(start_indices, self._indices_in_epoch)
             num_examples_from_each_class = np.floor(weights * batch_size).astype(np.int32)
@@ -92,6 +99,9 @@ class Dataset(object):
                 # Shuffle the data
                 self.shuffle()
 
+                # Data was shuffled => must recompute indices per class
+                self._indices_per_class = np.arange(self._num_classes) == np.argmax(self.labels, axis=1)[:, np.newaxis]
+
                 # Start next epoch
                 start_indices = np.zeros(self.num_classes, np.int32)
                 self._indices_in_epoch = num_examples_from_each_class
@@ -105,25 +115,27 @@ class Dataset(object):
 
             end_indices = self._indices_in_epoch
             batch_images = np.empty((batch_size,) + self._images[0].shape)
-            batch_labels = np.empty(batch_size)
+            batch_labels = np.empty((batch_size, self._num_classes))
             start_index_in_batch = 0
             print('start_indices = ', start_indices)
             print('end_indices = ', end_indices)
             for i in range(self.num_classes):
-                images_of_class_i = self._images[self._indices_per_class[:, i],]
-                labels_of_class_i = self._labels[self._indices_per_class[:, i],]
-                end_index_in_batch = start_index_in_batch + num_examples_from_each_class[i]
-                batch_images[start_index_in_batch:end_index_in_batch, ] = \
-                    images_of_class_i[start_indices[i]:end_indices[i], ]
-                batch_labels[start_index_in_batch:end_index_in_batch] = labels_of_class_i[
-                                                                        start_indices[i]:end_indices[i]]
-                start_index_in_batch = end_index_in_batch
+                if num_examples_from_each_class[i] > 0:
+                    images_of_class_i = self._images[self._indices_per_class[:, i], ]
+                    labels_of_class_i = self._labels[self._indices_per_class[:, i], ]
+                    end_index_in_batch = start_index_in_batch + num_examples_from_each_class[i]
+                    batch_images[start_index_in_batch:end_index_in_batch, ] = \
+                        images_of_class_i[start_indices[i]:end_indices[i], ]
+                    batch_labels[start_index_in_batch:end_index_in_batch] = labels_of_class_i[
+                                                                            start_indices[i]:end_indices[i]]
+                    start_index_in_batch = end_index_in_batch
+                    print(images_of_class_i.shape)
 
             # shuffle images inside batch because they're ordered by label
             perm = np.arange(batch_size)
             Dataset.rg.shuffle(perm)
-            batch_images = batch_images[perm,]
-            batch_labels = batch_labels[perm,]
+            batch_images = batch_images[perm, ]
+            batch_labels = batch_labels[perm, ]
             return batch_images, batch_labels
 
 
