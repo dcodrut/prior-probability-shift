@@ -15,7 +15,7 @@ class Lenet5(object):
                  variable_stddev=1., learning_rate=0.001, drop_out_keep_prob=0.5):
         self.file_name = os.getcwd() + '/results/Lenet5_{}_{}.png'.format(model_name, Utils.now_as_str())
         self.file_name_model = os.getcwd() + '/results/Lenet5_{}_{}.model.ckpt'.format(model_name,
-                                                                                      Utils.now_as_str())
+                                                                                       Utils.now_as_str())
         self.file_name_confusion_matrix = os.getcwd() + '/results/Lenet5_confusion_matrix_{}_{}.png' \
             .format(model_name, Utils.now_as_str())
         self.file_name_wrong_predicts = os.getcwd() + '/results/Lenet5_wrong_predicts_{}_{}.png' \
@@ -31,7 +31,7 @@ class Lenet5(object):
         self.epochs = epochs
         self.batch_size = batch_size
         self.label_size = mnist_dataset.num_classes
-        self.labels_name = ['0','1','2','3','4','5','6','7','8','9']
+        self.labels_name = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
         self.variable_mean = variable_mean
         self.variable_stddev = variable_stddev
 
@@ -44,7 +44,7 @@ class Lenet5(object):
 
         # consists of 32x32xcolor_channel
         color_channel = mnist_dataset.train.images.shape[3]
-        self.x = tf.placeholder(tf.float32, (None, mnist_dataset.image_size,  mnist_dataset.image_size, color_channel))
+        self.x = tf.placeholder(tf.float32, (None, mnist_dataset.image_size, mnist_dataset.image_size, color_channel))
 
         self.y = tf.placeholder(tf.float32, (None, self.label_size))
         self.keep_prob = tf.placeholder(tf.float32)
@@ -81,7 +81,6 @@ class Lenet5(object):
         s2 = tf.nn.max_pool(c1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
         # s2 = tf.nn.dropout(s2, self.keep_prob, seed=self.mnist_dataset.train.seed)
 
-
         c3_weights = tf.Variable(
             tf.truncated_normal(shape=(patch_size, patch_size, conv_layer_1_depth, conv_layer_2_depth), mean=mu,
                                 stddev=sigma))
@@ -97,7 +96,7 @@ class Lenet5(object):
         f5_biases = tf.Variable(tf.zeros(fc_layer_2_size))
         f5 = tf.matmul(s4_flatten, f5_weights) + f5_biases
         f5 = tf.nn.relu(f5)
-        f5 = tf.nn.dropout(f5, self.keep_prob, seed = self.mnist_dataset.train.seed)
+        f5 = tf.nn.dropout(f5, self.keep_prob, seed=self.mnist_dataset.train.seed)
 
         f6_weights = tf.Variable(tf.truncated_normal(shape=(fc_layer_2_size, fc_layer_3_size), mean=mu, stddev=sigma))
         f6_biases = tf.Variable(tf.zeros(fc_layer_3_size))
@@ -132,12 +131,6 @@ class Lenet5(object):
         total_acc, total_loss = 0, 0
         total_predict, total_actual = [], []
         wrong_predict_images = []
-
-        if self.session is None:
-            # try to restore last session
-            self.session = tf.Session()
-            saver = tf.train.Saver()
-            saver.restore(self.session, tf.train.latest_checkpoint('./results'))
 
         # tf.get_default_session()
         sess = self.session
@@ -200,7 +193,7 @@ class Lenet5(object):
                 # before plotting, sort images by true target label
                 wrong_actual = total_actual[total_actual != total_predict]
                 wrong_predict_images = np.array(wrong_predict_images)
-                wrong_predict_images_sorted = wrong_predict_images[wrong_actual.argsort(), ]
+                wrong_predict_images_sorted = wrong_predict_images[wrong_actual.argsort(),]
                 wrong_predict_images_sorted = [image for image in wrong_predict_images_sorted]
                 self.plotter.combine_images(wrong_predict_images_sorted, self.file_name_wrong_predicts)
             except Exception as ex:
@@ -208,7 +201,28 @@ class Lenet5(object):
         self.plotter.safe_shut_down()
 
     def predict_images(self, images):
-        saver = tf.train.Saver()
-        with tf.Session() as sess:
-            saver.restore(sess, tf.train.latest_checkpoint('./results'))
-            return sess.run(self.prediction_softmax, feed_dict={self.x: images, self.keep_prob: 1.0})
+        return self.session.run(self.prediction_softmax, feed_dict={self.x: images, self.keep_prob: 1.0})
+
+    def restore_session(self, ckpt_dir, ckpt_filename=None):
+        """
+        Function for restore a model session from previous saved ones
+
+        :param ckpt_dir: a directory for checkpoint to search in
+        :param ckpt_filename: try to restore model with this checkpoint file name; if is None, restore a model using
+                              latest_checkpoint method from ckpt_dir directory
+        """
+
+        dir = os.path.dirname(ckpt_dir)
+
+        # check if directory  ckpt_dir exists
+        if not os.path.exists(dir):
+            print('Directory {} not found.'.format(ckpt_dir))
+        else:
+            if self.session is not None:
+                self.session.close()
+            self.session = tf.Session()
+            saver = tf.train.Saver()
+            if ckpt_filename is not None:
+                saver.restore(sess=self.session, save_path=os.path.join(dir, ckpt_filename))
+            else:
+                saver.restore(sess=self.session, save_path=tf.train.latest_checkpoint(ckpt_dir))
