@@ -10,22 +10,22 @@ logging.config.fileConfig('logging.conf')
 
 
 class Lenet5(object):
+    """
+        Implements a classic Lenet5 architecture and some methods for training, test and evaluation
+    """
+
     def __init__(self, mnist_dataset, model_name, show_plot_window=False,
                  epochs=100, batch_size=500, variable_mean=0.,
                  variable_stddev=1., learning_rate=0.001, drop_out_keep_prob=0.5):
-        self.file_name = os.getcwd() + '/results/Lenet5_{}_{}.png'.format(model_name, Utils.now_as_str())
-        self.file_name_model = os.getcwd() + '/results/Lenet5_{}_{}.model.ckpt'.format(model_name,
-                                                                                       Utils.now_as_str())
-        self.file_name_confusion_matrix = os.getcwd() + '/results/Lenet5_confusion_matrix_{}_{}.png' \
-            .format(model_name, Utils.now_as_str())
-        self.file_name_wrong_predicts = os.getcwd() + '/results/Lenet5_wrong_predicts_{}_{}.png' \
-            .format(model_name, Utils.now_as_str())
-        title = "{}_{}_epochs_{}_batch_size_{}_learning_rate_{}_keep_prob_{}_variable_stddev_{}" \
-            .format(self.__class__.__name__, model_name, epochs, batch_size,
-                    learning_rate, drop_out_keep_prob, variable_stddev)
-        self.plotter = TrainingPlotter(title,
-                                       self.file_name,
-                                       show_plot_window=show_plot_window)
+        self.file_name = '{}/results/Lenet5_{}_{}.png'.format(os.getcwd(), model_name, Utils.now_as_str())
+        self.file_name_model = '{}/results/Lenet5_{}_{}.model.ckpt'.format(os.getcwd(), model_name, Utils.now_as_str())
+        self.file_name_confusion_matrix = '{}/results/Lenet5_confusion_matrix_{}_{}.png'.format(os.getcwd(), model_name,
+                                                                                                Utils.now_as_str())
+        self.file_name_wrong_predicts = '{}/results/Lenet5_wrong_predicts_{}_{}.png'.format(os.getcwd(), model_name,
+                                                                                            Utils.now_as_str())
+        title = "{}_{}_epochs_{}_batch_size_{}_learning_rate_{}_keep_prob_{}_variable_stddev_{}".format(
+            self.__class__.__name__, model_name, epochs, batch_size, learning_rate, drop_out_keep_prob, variable_stddev)
+        self.plotter = TrainingPlotter(title, self.file_name, show_plot_window=show_plot_window)
 
         self.mnist_dataset = mnist_dataset
         self.epochs = epochs
@@ -175,8 +175,8 @@ class Lenet5(object):
                 total_tran_acc = total_tran_acc / num_examples
                 val_loss, val_acc = self.eval_data(self.mnist_dataset.validation)
                 logging.info(
-                    "EPOCH {} --- Training: loss = {:.3f}, accuracy = {:.3f}; Validation: loss = {:.3f}, accuracy = {:.3f};"
-                        .format(i + 1, total_tran_loss, total_tran_acc, val_loss, val_acc))
+                    "EPOCH {} --- Training: loss = {:.3f}, acc = {:.3f}; Validation: loss = {:.3f}, acc = {:.3f};"
+                    .format(i + 1, total_tran_loss, total_tran_acc, val_loss, val_acc))
                 self.plotter.add_loss_accuracy_to_plot(i, total_tran_loss, total_tran_acc, val_loss, val_acc,
                                                        redraw=True)
 
