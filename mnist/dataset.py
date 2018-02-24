@@ -21,6 +21,7 @@ class Dataset(object):
         self._indices_in_epoch = np.zeros(num_classes, np.int32)
         self._indices_per_class = np.arange(num_classes) == np.argmax(labels, axis=1)[:, np.newaxis]
         self._counts_per_class = np.sum(self._indices_per_class, axis=0)
+        self._label_distr = self._counts_per_class / np.sum(self._counts_per_class)
 
     @property
     def images(self):
@@ -46,6 +47,13 @@ class Dataset(object):
     def counts_per_class(self):
         return self._counts_per_class
 
+    @property
+    def label_distr(self):
+        return self._label_distr
+
+    def reset_indices_in_epoch(self):
+        self._indices_in_epoch = np.zeros(self.num_classes, np.int32)
+
     @staticmethod
     def reset_rg():
         Dataset.rg = np.random.RandomState(Dataset.seed)
@@ -61,6 +69,10 @@ class Dataset(object):
         Returns the next `batch_size` examples from this data set.
         If weights parameter is given, then the generated batch will respect that distribution (of labels).
         Otherwise, an uniform distribution is assumed.
+
+        :param batch_size: how many examples the batch will contain
+        :param weights: importance of each label
+        :return: batch of examples and their labels
         """
         if weights is None:
             start = self._index_in_epoch
@@ -77,7 +89,8 @@ class Dataset(object):
                 self._index_in_epoch = batch_size
                 assert batch_size <= self._num_examples
             end = self._index_in_epoch
-            return self._images[start:end], self._labels[start:end]
+            batch_x = self._images[start:end]
+            batch_y = self._labels[start:end]
         else:
             # make sure that weights sum to 1
             weights = np.array(weights)
@@ -114,48 +127,49 @@ class Dataset(object):
                     '\n\tCounts per class needed to build the batch = ' + str(num_examples_from_each_class)
 
             end_indices = self._indices_in_epoch
-            batch_images = np.empty((batch_size,) + self._images[0].shape)
-            batch_labels = np.empty((batch_size, self._num_classes))
+            batch_x = np.empty((batch_size,) + self._images[0].shape)
+            batch_y = np.empty((batch_size, self._num_classes))
             start_index_in_batch = 0
-            print('start_indices = ', start_indices)
-            print('end_indices = ', end_indices)
+            # print('start_indices = ', start_indices)
+            # print('end_indices = ', end_indices)
             for i in range(self.num_classes):
                 if num_examples_from_each_class[i] > 0:
-                    images_of_class_i = self._images[self._indices_per_class[:, i], ]
-                    labels_of_class_i = self._labels[self._indices_per_class[:, i], ]
+                    images_of_class_i = self._images[self._indices_per_class[:, i],]
+                    labels_of_class_i = self._labels[self._indices_per_class[:, i],]
                     end_index_in_batch = start_index_in_batch + num_examples_from_each_class[i]
-                    batch_images[start_index_in_batch:end_index_in_batch, ] = \
+                    batch_x[start_index_in_batch:end_index_in_batch, ] = \
                         images_of_class_i[start_indices[i]:end_indices[i], ]
-                    batch_labels[start_index_in_batch:end_index_in_batch] = labels_of_class_i[
-                                                                            start_indices[i]:end_indices[i]]
+                    batch_y[start_index_in_batch:end_index_in_batch] = labels_of_class_i[
+                                                                       start_indices[i]:end_indices[i]]
                     start_index_in_batch = end_index_in_batch
-                    print(images_of_class_i.shape)
 
             # shuffle images inside batch because they're ordered by label
             perm = np.arange(batch_size)
             Dataset.rg.shuffle(perm)
-            batch_images = batch_images[perm, ]
-            batch_labels = batch_labels[perm, ]
-            return batch_images, batch_labels
+            batch_x = batch_x[perm,]
+            batch_y = batch_y[perm,]
+
+        return batch_x, batch_y
 
 
 class MNISTDataset(object):
     image_size = 28
-    train_validation_size = 60000
-    train_size = 54000  # number of images and labels from train dataset
-    validation_size = 6000  # number of images and labels from validation dataset
-    test_size = 10000  # number of images and labels from test dataset
     num_channels = 1  # grayscale
     num_classes = 10
 
     def __init__(self, train_images_path, train_labels_path, test_images_path, test_labels_path):
-        train_validation_images = MNISTDataset.load_images(train_images_path, MNISTDataset.train_validation_size)
-        train_validation_labels = MNISTDataset.load_labels(train_labels_path, MNISTDataset.train_validation_size)
-        test_images = MNISTDataset.load_images(test_images_path, MNISTDataset.test_size)
-        test_labels = MNISTDataset.load_labels(test_labels_path, MNISTDataset.test_size)
+        train_validation_size = 60000
+        train_size = 54000  # number of images and labels from train dataset
+        validation_size = 6000  # number of images and labels from validation dataset
+        test_size = 10000  # number of images and labels from test dataset
+
+        train_validation_images = MNISTDataset.load_images(train_images_path, train_validation_size)
+        train_validation_labels = MNISTDataset.load_labels(train_labels_path, train_validation_size)
+        test_images = MNISTDataset.load_images(test_images_path, test_size)
+        test_labels = MNISTDataset.load_labels(test_labels_path, test_size)
         train_images, validation_images, train_labels, validation_labels = \
             train_test_split(train_validation_images, train_validation_labels,
-                             test_size=MNISTDataset.validation_size, random_state=42)
+                             test_size=validation_size, random_state=42)
 
         # convert labels into one-hot vectors
         train_labels = Utils.dense_to_one_hot(train_labels, MNISTDataset.num_classes)
@@ -165,6 +179,9 @@ class MNISTDataset(object):
         self._train = Dataset(train_images, train_labels, MNISTDataset.num_classes)
         self._validation = Dataset(validation_images, validation_labels, MNISTDataset.num_classes)
         self._test = Dataset(test_images, test_labels, MNISTDataset.num_classes)
+
+        # save a screenshot of current dataset (maybe used in impose_distribution method)
+        self._backup()
 
         # reset Dataset's random generator
         Dataset.reset_rg()
@@ -226,9 +243,58 @@ class MNISTDataset(object):
     @property
     def summary(self):
         return """
-        training data set: images = {}, labels = {}
-        validation data set: images = {}, labels = {}
-        testing data set: images = {}, labels = {}
-        """.format(self._train.images.shape, self._train.labels.shape,
-                   self._validation.images.shape, self._validation.labels.shape,
-                   self._test.images.shape, self._test.labels.shape)
+        training data set: images = {}, labels = {}, distr = {}
+        validation data set: images = {}, labels = {}, distr = {}
+        testing data set: images = {}, labels = {}, distr = {}
+        """.format(self.train.images.shape, self.train.labels.shape,
+                   np.round(self.train.label_distr, decimals=3),
+                   self.validation.images.shape, self._validation.labels.shape,
+                   np.round(self.validation.label_distr, decimals=3),
+                   self.test.images.shape, self.test.labels.shape,
+                   np.round(self.test.label_distr, decimals=3)
+                   )
+
+    def impose_distribution(self, weights, max_weight):
+        """
+        Overwrite current MNIST dataset with a subset w.r.t. given distribution
+
+        :param weights: label distribution
+        :param max_weight: if multiple distributions will be considered, than we need the global maximum weight value
+                           in order to build subsets of the same size for all distributions considered
+        """
+
+        # restore orignal dataset and reset start indices in order to start building the subset from the beginning
+        self._restore_from_backup()
+        self.train.reset_indices_in_epoch()
+        self.validation.reset_indices_in_epoch()
+        self.test.reset_indices_in_epoch()
+
+        train_num_examples = np.floor(np.min(self.train.counts_per_class) / max_weight).astype(np.int32)
+        # round to hundreds
+        train_num_examples -= train_num_examples % 100
+        train_subset_x, train_subset_y = self.train.next_batch(batch_size=train_num_examples, weights=weights)
+
+        validation_num_examples = np.floor(np.min(self.validation.counts_per_class) / max_weight).astype(np.int32)
+        # round to hundreds
+        validation_num_examples -= validation_num_examples % 100
+        validation_subset_x, validation_subset_y = self.validation.next_batch(batch_size=validation_num_examples,
+                                                                                 weights=weights)
+
+        test_num_examples = np.floor(np.min(self.test.counts_per_class) / max_weight).astype(np.int32)
+        # round to hundreds
+        test_num_examples -= test_num_examples % 100
+        test_subset_x, test_subset_y = self.test.next_batch(batch_size=test_num_examples, weights=weights)
+
+        self._train = Dataset(train_subset_x, train_subset_y, MNISTDataset.num_classes)
+        self._validation = Dataset(validation_subset_x, validation_subset_y, MNISTDataset.num_classes)
+        self._test = Dataset(test_subset_x, test_subset_y, MNISTDataset.num_classes)
+
+    def _backup(self):
+        self._train_backup = self._train
+        self._validation_backup = self._validation
+        self._test_backup = self._test
+
+    def _restore_from_backup(self):
+        self._train = self._train_backup
+        self._validation = self._validation_backup
+        self._test = self._test_backup
