@@ -19,9 +19,9 @@ class Lenet5(object):
                  variable_stddev=1., learning_rate=0.001, drop_out_keep_prob=0.5):
         self.file_name = '{}/results/Lenet5_{}_{}.png'.format(os.getcwd(), model_name, Utils.now_as_str())
         self.file_name_model = '{}/results/Lenet5_{}_{}.model.ckpt'.format(os.getcwd(), model_name, Utils.now_as_str())
-        self.file_name_confusion_matrix = '{}/results/Lenet5_confusion_matrix_{}_{}.png'.format(os.getcwd(), model_name,
+        self.file_name_confusion_matrix = '{}/results/Lenet5_{}_{}.confusion_matrix.png'.format(os.getcwd(), model_name,
                                                                                                 Utils.now_as_str())
-        self.file_name_wrong_predicts = '{}/results/Lenet5_wrong_predicts_{}_{}.png'.format(os.getcwd(), model_name,
+        self.file_name_wrong_predicts = '{}/results/Lenet5_{}_{}.wrong_predicts.png'.format(os.getcwd(), model_name,
                                                                                             Utils.now_as_str())
         title = "{}_{}_epochs_{}_batch_size_{}_learning_rate_{}_keep_prob_{}_variable_stddev_{}".format(
             self.__class__.__name__, model_name, epochs, batch_size, learning_rate, drop_out_keep_prob, variable_stddev)
@@ -42,7 +42,6 @@ class Lenet5(object):
         # clear the default graph
         tf.reset_default_graph()
 
-        # consists of 32x32xcolor_channel
         color_channel = mnist_dataset.train.images.shape[3]
         self.x = tf.placeholder(tf.float32, (None, mnist_dataset.image_size, mnist_dataset.image_size, color_channel))
 
@@ -151,7 +150,7 @@ class Lenet5(object):
         return total_loss / num_examples, total_acc / num_examples, total_predict, total_actual, wrong_predict_images
 
     def train(self):
-        saver = tf.train.Saver()
+        saver = tf.train.Saver(save_relative_paths=True)
         if self.session is not None:
             self.session.close()
         with tf.Session() as self.session:
