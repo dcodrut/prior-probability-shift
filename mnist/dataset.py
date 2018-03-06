@@ -64,6 +64,9 @@ class Dataset(object):
         self._images = self._images[perm,]
         self._labels = self._labels[perm,]
 
+        # Data was shuffled => must recompute indices per class
+        self._indices_per_class = np.arange(self._num_classes) == np.argmax(self.labels, axis=1)[:, np.newaxis]
+
     def next_batch(self, batch_size, weights=None):
         """
         Returns the next `batch_size` examples from this data set.
@@ -103,7 +106,7 @@ class Dataset(object):
             diff = batch_size - np.sum(num_examples_from_each_class)
             if diff > 0:
                 num_examples_from_each_class[np.argmax(weights)] += diff
-            print('num_examples_from_each_class = ', num_examples_from_each_class)
+            print('Imposing distr: num_examples_from_each_class = ', num_examples_from_each_class)
             self._indices_in_epoch += num_examples_from_each_class
             if np.sum(self._indices_in_epoch > self._counts_per_class) > 0:
                 # Finished epoch
@@ -111,9 +114,6 @@ class Dataset(object):
 
                 # Shuffle the data
                 self.shuffle()
-
-                # Data was shuffled => must recompute indices per class
-                self._indices_per_class = np.arange(self._num_classes) == np.argmax(self.labels, axis=1)[:, np.newaxis]
 
                 # Start next epoch
                 start_indices = np.zeros(self.num_classes, np.int32)
@@ -254,17 +254,26 @@ class MNISTDataset(object):
                    np.round(self.test.label_distr, decimals=3)
                    )
 
-    def impose_distribution(self, weights, max_weight):
+    def impose_distribution(self, weights, global_max_weight=None):
         """
-        Overwrite current MNIST dataset with a subset w.r.t. given distribution
+        Overwrites current MNIST dataset with a subset w.r.t. a given distribution
 
         :param weights: label distribution
-        :param max_weight: if multiple distributions will be considered, than we need the global maximum weight value
-                           in order to build subsets of the same size for all distributions considered
+        :param global_max_weight: - if multiple distributions will be considered in training, than we might need the
+                                global maximum weight value in order to build subsets of the same size for
+                                all distributions considered, so we need to take it into account when building the
+                                subset
+                                 - if it's None, than global_max_weight will be local maximum (i.e. the maximum value
+                                 of the current weights considered)
         """
 
+        if global_max_weight is None:
+            max_weight = np.max(weights)
+        else:
+            max_weight = global_max_weight
+
         # restore orignal dataset and reset start indices in order to start building the subset from the beginning
-        self._restore_from_backup()
+        self.restore_from_backup()
         self.train.reset_indices_in_epoch()
         self.validation.reset_indices_in_epoch()
         self.test.reset_indices_in_epoch()
@@ -278,7 +287,7 @@ class MNISTDataset(object):
         # round to hundreds
         validation_num_examples -= validation_num_examples % 100
         validation_subset_x, validation_subset_y = self.validation.next_batch(batch_size=validation_num_examples,
-                                                                                 weights=weights)
+                                                                              weights=weights)
 
         test_num_examples = np.floor(np.min(self.test.counts_per_class) / max_weight).astype(np.int32)
         # round to hundreds
@@ -294,7 +303,7 @@ class MNISTDataset(object):
         self._validation_backup = self._validation
         self._test_backup = self._test
 
-    def _restore_from_backup(self):
+    def restore_from_backup(self):
         self._train = self._train_backup
         self._validation = self._validation_backup
         self._test = self._test_backup
