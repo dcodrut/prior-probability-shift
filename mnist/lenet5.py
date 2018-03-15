@@ -130,24 +130,28 @@ class Lenet5(object):
         total_acc, total_loss = 0, 0
         total_predict, total_actual = [], []
         wrong_predict_images = []
-
+        total_softmax_output_probs = None
         # tf.get_default_session()
         sess = self.session
         for step in range(steps_per_epoch):
             batch_x, batch_y = dataset.next_batch(self.batch_size)
-            loss, acc, predict, actual = sess.run(
-                [self.loss_op, self.accuracy_op, tf.argmax(self.network, 1), tf.argmax(self.y, 1)],
-                feed_dict={self.x: batch_x, self.y: batch_y,
-                           self.keep_prob: 1.0})
+            loss, acc, predict, actual, logits = sess.run(
+                [self.loss_op, self.accuracy_op, tf.argmax(self.network, 1), tf.argmax(self.y, 1), self.network],
+                feed_dict={self.x: batch_x, self.y: batch_y, self.keep_prob: 1.0})
             total_acc += (acc * batch_x.shape[0])
             total_loss += (loss * batch_x.shape[0])
             total_predict = np.append(total_predict, predict)
             total_actual = np.append(total_actual, actual)
+            softmax_output_probs = tf.Session().run(tf.nn.softmax(logits=logits))
+            if total_softmax_output_probs is None:
+                total_softmax_output_probs = softmax_output_probs
+            else:
+                total_softmax_output_probs = np.append(total_softmax_output_probs, softmax_output_probs, axis=0)
             for index in range(len(predict)):
                 if predict[index] != actual[index]:
                     wrong_predict_images.append(batch_x[index])
-
-        return total_loss / num_examples, total_acc / num_examples, total_predict, total_actual, wrong_predict_images
+        return total_loss / num_examples, total_acc / num_examples, total_predict, total_actual, wrong_predict_images, \
+               total_softmax_output_probs
 
     def train(self):
         saver = tf.train.Saver(save_relative_paths=True)
@@ -164,6 +168,10 @@ class Lenet5(object):
                 total_tran_acc = 0.0
                 for step in range(steps_per_epoch):
                     batch_x, batch_y = self.mnist_dataset.train.next_batch(self.batch_size)
+                    # print(np.sum(self.mnist_dataset.train.images),
+                    #       np.sum(self.mnist_dataset.validation.images),
+                    #       np.sum(self.mnist_dataset.test.images),
+                    #       np.round(np.bincount(np.argmax(batch_y, axis=1)) / self.batch_size, decimals=2))
                     _, train_loss, train_acc = self.session.run(
                         [self.train_op, self.loss_op, self.accuracy_op],
                         feed_dict={self.x: batch_x, self.y: batch_y, self.keep_prob: self.drop_out_keep_prob})
@@ -175,7 +183,7 @@ class Lenet5(object):
                 val_loss, val_acc = self.eval_data(self.mnist_dataset.validation)
                 logging.info(
                     "EPOCH {} --- Training: loss = {:.3f}, acc = {:.3f}; Validation: loss = {:.3f}, acc = {:.3f};"
-                    .format(i + 1, total_tran_loss, total_tran_acc, val_loss, val_acc))
+                        .format(i + 1, total_tran_loss, total_tran_acc, val_loss, val_acc))
                 self.plotter.add_loss_accuracy_to_plot(i, total_tran_loss, total_tran_acc, val_loss, val_acc,
                                                        redraw=True)
 
@@ -183,7 +191,7 @@ class Lenet5(object):
             logging.info("Model saved into {}".format(self.file_name_model))
 
             # Evaluate on the test data
-            test_loss, test_acc, total_predict, total_actual, wrong_predict_images = self.test_data(
+            test_loss, test_acc, total_predict, total_actual, wrong_predict_images, _ = self.test_data(
                 self.mnist_dataset.test)
             logging.info("Test loss = {:.3f} accuracy = {:.3f}".format(test_loss, test_acc))
             self.plotter.plot_confusion_matrix(
