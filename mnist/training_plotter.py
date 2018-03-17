@@ -28,7 +28,7 @@ class TrainingPlotter(object):
     def plot_confusion_matrix(y_true, y_pred, labels):
         from sklearn.metrics import confusion_matrix
         cmap = plt.cm.binary
-        cm = confusion_matrix(y_true, y_pred)
+        cm = confusion_matrix(y_true, y_pred, labels=range(0, len(labels)))
         tick_marks = np.array(range(len(labels))) + 0.5
         np.set_printoptions(precision=2)
         cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
