@@ -46,6 +46,7 @@ class Lenet5(object):
         self.x = tf.placeholder(tf.float32, (None, mnist_dataset.image_size, mnist_dataset.image_size, color_channel))
 
         self.y = tf.placeholder(tf.float32, (None, self.label_size))
+        self.train_distr = tf.Variable(initial_value=self.mnist_dataset.train.label_distr, name='train_distr')
         self.keep_prob = tf.placeholder(tf.float32)
         self.drop_out_keep_prob = drop_out_keep_prob
         self.network = Lenet5._LeNet(self, self.x, color_channel, variable_mean, variable_stddev)
@@ -218,17 +219,27 @@ class Lenet5(object):
         :param ckpt_filename: try to restore model with this checkpoint file name; if is None, restore a model using
                               latest_checkpoint method from ckpt_dir directory
         """
-
         dir = os.path.dirname(ckpt_dir)
 
         # check if directory  ckpt_dir exists
         if not os.path.exists(dir):
             print('Directory {} not found.'.format(ckpt_dir))
         else:
+
+            # train_distr was introduced later so we will try to restore as much we can from the checkpoint file
+            reader = tf.train.NewCheckpointReader(os.path.join(dir, ckpt_filename))
+            vars_to_restore = []
+            for var in tf.global_variables():
+                var_name = var.name.split(':')[0]
+                if reader.has_tensor(var_name):
+                    vars_to_restore.append(var)
+
+            saver = tf.train.Saver(vars_to_restore)
+
             if self.session is not None:
                 self.session.close()
             self.session = tf.Session()
-            saver = tf.train.Saver()
+
             if ckpt_filename is not None:
                 saver.restore(sess=self.session, save_path=os.path.join(dir, ckpt_filename))
             else:
