@@ -46,7 +46,7 @@ class Utils(object):
 
         tick_marks = np.array(range(len(train_distributions))) + 0.5
         np.set_printoptions(precision=3)
-        main_fig = plt.figure(figsize=(40, 30), dpi=200)
+        main_fig = plt.figure(figsize=(40, 30), dpi=100)
         main_ax = plt.subplot(1, 1, 1)
         ind_array = np.arange(len(train_distributions))
         x, y = np.meshgrid(ind_array, ind_array)
