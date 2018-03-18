@@ -30,7 +30,6 @@ class TrainingPlotter(object):
         cmap = plt.cm.binary
         cm = confusion_matrix(y_true, y_pred, labels=range(0, len(labels)))
         tick_marks = np.array(range(len(labels))) + 0.5
-        np.set_printoptions(precision=2)
         # each line sum to the corresponding num_examples of that class => we can normalize the matrix into [0,1]
         counts_per_class = cm.sum(axis=1)
         counts_per_class[counts_per_class == 0] = 1  # in order to prevent division by zero
