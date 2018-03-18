@@ -31,7 +31,10 @@ class TrainingPlotter(object):
         cm = confusion_matrix(y_true, y_pred, labels=range(0, len(labels)))
         tick_marks = np.array(range(len(labels))) + 0.5
         np.set_printoptions(precision=2)
-        cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        # each line sum to the corresponding num_examples of that class => we can normalize the matrix into [0,1]
+        counts_per_class = cm.sum(axis=1)
+        counts_per_class[counts_per_class == 0] = 1  # in order to prevent division by zero
+        cm_normalized = cm.astype('float') / counts_per_class[:, np.newaxis]
         plt.figure(figsize=(20, 16), dpi=120)
         ind_array = np.arange(len(labels))
         x, y = np.meshgrid(ind_array, ind_array)
