@@ -111,23 +111,35 @@ class Lenet5(object):
 
         return logits
 
-    def eval_data(self, dataset):
-        steps_per_epoch = dataset.num_examples // self.batch_size
-        num_examples = steps_per_epoch * self.batch_size
+    def eval_data(self, dataset, use_only_one_batch=True):
+        if not use_only_one_batch:
+            validation_batch_size = self.batch_size  # use train batch size
+            steps_per_epoch = dataset.num_examples // validation_batch_size
+            num_examples = steps_per_epoch * validation_batch_size
+        else:
+            validation_batch_size = dataset.num_examples
+            steps_per_epoch = 1
+            num_examples = dataset.num_examples
         total_acc, total_loss = 0, 0
         sess = self.session
         # tf.get_default_session()
         for step in range(steps_per_epoch):
-            batch_x, batch_y = dataset.next_batch(self.batch_size)
+            batch_x, batch_y = dataset.next_batch(validation_batch_size)
             loss, acc = sess.run([self.loss_op, self.accuracy_op], feed_dict={self.x: batch_x, self.y: batch_y,
                                                                               self.keep_prob: 1.0})
             total_acc += (acc * batch_x.shape[0])
             total_loss += (loss * batch_x.shape[0])
         return total_loss / num_examples, total_acc / num_examples
 
-    def test_data(self, dataset):
-        steps_per_epoch = dataset.num_examples // self.batch_size
-        num_examples = steps_per_epoch * self.batch_size
+    def test_data(self, dataset, use_only_one_batch=True):
+        if not use_only_one_batch:
+            test_batch_size = self.batch_size  # use train batch size
+            steps_per_epoch = dataset.num_examples // test_batch_size
+            num_examples = steps_per_epoch * test_batch_size
+        else:
+            test_batch_size = dataset.num_examples
+            steps_per_epoch = 1
+            num_examples = dataset.num_examples
         total_acc, total_loss = 0, 0
         total_predict, total_actual = [], []
         wrong_predict_images = []
@@ -135,7 +147,7 @@ class Lenet5(object):
         # tf.get_default_session()
         sess = self.session
         for step in range(steps_per_epoch):
-            batch_x, batch_y = dataset.next_batch(self.batch_size)
+            batch_x, batch_y = dataset.next_batch(test_batch_size)
             loss, acc, predict, actual, logits = sess.run(
                 [self.loss_op, self.accuracy_op, tf.argmax(self.network, 1), tf.argmax(self.y, 1), self.network],
                 feed_dict={self.x: batch_x, self.y: batch_y, self.keep_prob: 1.0})
@@ -162,6 +174,8 @@ class Lenet5(object):
             self.session.run(tf.initialize_all_variables())
             steps_per_epoch = self.mnist_dataset.train.num_examples // self.batch_size
             num_examples = steps_per_epoch * self.batch_size
+            logging.info('Training will use num_examples = {} from training set size = {}'
+                         .format(num_examples, self.mnist_dataset.train.num_examples))
             # Train model
             for i in range(self.epochs):
                 self.mnist_dataset.train.shuffle()
@@ -169,10 +183,6 @@ class Lenet5(object):
                 total_tran_acc = 0.0
                 for step in range(steps_per_epoch):
                     batch_x, batch_y = self.mnist_dataset.train.next_batch(self.batch_size)
-                    # print(np.sum(self.mnist_dataset.train.images),
-                    #       np.sum(self.mnist_dataset.validation.images),
-                    #       np.sum(self.mnist_dataset.test.images),
-                    #       np.round(np.bincount(np.argmax(batch_y, axis=1)) / self.batch_size, decimals=2))
                     _, train_loss, train_acc = self.session.run(
                         [self.train_op, self.loss_op, self.accuracy_op],
                         feed_dict={self.x: batch_x, self.y: batch_y, self.keep_prob: self.drop_out_keep_prob})
@@ -193,7 +203,7 @@ class Lenet5(object):
 
             # Evaluate on the test data
             test_loss, test_acc, total_predict, total_actual, wrong_predict_images, _ = self.test_data(
-                self.mnist_dataset.test)
+                self.mnist_dataset.test, use_only_one_batch=True)
             logging.info("Test loss = {:.3f} accuracy = {:.3f}".format(test_loss, test_acc))
             self.plotter.plot_confusion_matrix(
                 total_actual, total_predict, self.labels_name).savefig(self.file_name_confusion_matrix)
