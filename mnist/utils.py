@@ -1,4 +1,6 @@
 import numpy as np
+import tensorflow as tf
+import os
 from datetime import datetime
 
 
@@ -16,7 +18,7 @@ class Utils(object):
 
     @staticmethod
     def now_as_str():
-        return "{:%Y_%m_%d_%H_%M}".format(datetime.now())
+        return "{:%Y_%m_%d---%H_%M}".format(datetime.now())
 
     @staticmethod
     def dense_to_one_hot(labels_dense, num_classes):
@@ -121,3 +123,14 @@ class Utils(object):
         plt.close(temp_fig)
 
         return plt
+
+    @staticmethod
+    def restore_variable_from_checkpoint(ckpt_dir, ckpt_file, var_name):
+        reader = tf.train.NewCheckpointReader(os.path.join(ckpt_dir, ckpt_file))
+        for var in tf.global_variables():
+            if var.name.split(':')[0] == var_name and reader.has_tensor(var_name):
+                saver = tf.train.Saver([var])
+                sess = tf.Session()
+                saver.restore(sess=sess, save_path=os.path.join('./results/', 'Lenet5_no_name_2018_04_10---10_23.model.ckpt'))
+                return sess.run(var)
+        return None
