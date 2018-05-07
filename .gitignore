@@ -11,3 +11,5 @@ mnist/results
 mnist/.idea
 mnist/.ipynb_checkpoints
 mnist/__pycache__
+
+*.png

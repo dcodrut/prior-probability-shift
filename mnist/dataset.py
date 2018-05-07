@@ -58,6 +58,9 @@ class Dataset(object):
     def reset_rg():
         Dataset.rg = np.random.RandomState(Dataset.seed)
 
+    def reset_epochs_completed(self):
+        self._epochs_completed = 0
+
     def shuffle(self):
         perm = np.arange(self._num_examples)
         Dataset.rg.shuffle(perm)
@@ -106,7 +109,7 @@ class Dataset(object):
             diff = batch_size - np.sum(num_examples_from_each_class)
             if diff > 0:
                 num_examples_from_each_class[np.argmax(weights)] += diff
-            print('Imposing distr: num_examples_from_each_class = ', num_examples_from_each_class)
+            # print('Imposing distr: num_examples_from_each_class = ', num_examples_from_each_class)
             self._indices_in_epoch += num_examples_from_each_class
             if np.sum(self._indices_in_epoch > self._counts_per_class) > 0:
                 # Finished epoch
@@ -127,6 +130,8 @@ class Dataset(object):
                     '\n\tCounts per class needed to build the batch = ' + str(num_examples_from_each_class)
 
             end_indices = self._indices_in_epoch
+            # print(end_indices)
+            # print(sum(end_indices))
             batch_x = np.empty((batch_size,) + self._images[0].shape)
             batch_y = np.empty((batch_size, self._num_classes))
             start_index_in_batch = 0
@@ -181,7 +186,7 @@ class MNISTDataset(object):
         self._test = Dataset(test_images, test_labels, MNISTDataset.num_classes)
 
         # save a screenshot of current dataset (maybe used in impose_distribution method)
-        self._backup()
+        self.backup()
 
         # reset Dataset's random generator
         Dataset.reset_rg()
@@ -272,7 +277,7 @@ class MNISTDataset(object):
         else:
             max_weight = global_max_weight
 
-        # restore orignal dataset and reset start indices in order to start building the subset from the beginning
+        # restore original dataset and reset start indices in order to start building the subset from the beginning
         self.restore_from_backup()
         self.train.reset_indices_in_epoch()
         self.validation.reset_indices_in_epoch()
@@ -298,7 +303,11 @@ class MNISTDataset(object):
         self._validation = Dataset(validation_subset_x, validation_subset_y, MNISTDataset.num_classes)
         self._test = Dataset(test_subset_x, test_subset_y, MNISTDataset.num_classes)
 
-    def _backup(self):
+    def impose_distr_on_train_dataset(self, subset_size, weights):
+        train_subset_x, train_subset_y = self.train.next_batch(batch_size=subset_size, weights=weights)
+        self._train = Dataset(train_subset_x, train_subset_y, MNISTDataset.num_classes)
+
+    def backup(self):
         self._train_backup = self._train
         self._validation_backup = self._validation
         self._test_backup = self._test

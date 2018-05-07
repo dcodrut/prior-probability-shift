@@ -131,6 +131,7 @@ class Utils(object):
             if var.name.split(':')[0] == var_name and reader.has_tensor(var_name):
                 saver = tf.train.Saver([var])
                 sess = tf.Session()
-                saver.restore(sess=sess, save_path=os.path.join('./results/', 'Lenet5_no_name_2018_04_10---10_23.model.ckpt'))
+                saver.restore(sess=sess, save_path=os.path.join(ckpt_dir, ckpt_file))
                 return sess.run(var)
+        print('Variable {} not found in {}{}\n'.format(var_name, ckpt_dir, ckpt_file))
         return None

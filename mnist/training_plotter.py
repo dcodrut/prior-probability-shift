@@ -41,13 +41,13 @@ class TrainingPlotter(object):
         for x_val, y_val in zip(x.flatten(), y.flatten()):
             if (intFlag):
                 c = cm[y_val][x_val]
-                plt.text(x_val, y_val, "%d" % (c,), color='red', fontsize=8, va='center', ha='center')
+                plt.text(x_val, y_val, "%d" % (c,), color='red', fontsize=14, va='center', ha='center')
             else:
                 c = cm_normalized[y_val][x_val]
                 if (c > 0.001):
-                    plt.text(x_val, y_val, "%0.3f" % (c,), color='red', fontsize=7, va='center', ha='center')
+                    plt.text(x_val, y_val, "%0.3f" % (c,), color='red', fontsize=14, va='center', ha='center')
                 else:
-                    plt.text(x_val, y_val, "%d" % (0,), color='red', fontsize=7, va='center', ha='center')
+                    plt.text(x_val, y_val, "%d" % (0,), color='red', fontsize=14, va='center', ha='center')
         if (intFlag):
             plt.imshow(cm, interpolation='nearest', cmap=cmap)
         else:

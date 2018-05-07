@@ -14,10 +14,10 @@ class Lenet5(object):
         Implements a classic Lenet5 architecture and some methods for training, test and evaluation
     """
 
-    def __init__(self, mnist_dataset, model_name, show_plot_window=False,
+    def __init__(self, mnist_dataset, model_name='no_name', show_plot_window=False,
                  epochs=100, batch_size=500, variable_mean=0.,
-                 variable_stddev=1., learning_rate=0.001, drop_out_keep_prob=0.5):
-        self.file_name = '{}/results/Lenet5_{}_{}.png'.format(os.getcwd(), model_name, Utils.now_as_str())
+                 variable_stddev=1., learning_rate=0.001, drop_out_keep_prob=0.5, display_summary=True):
+        self.file_name = '{}/results/Lenet5_{}_{}.learning_curve.png'.format(os.getcwd(), model_name, Utils.now_as_str())
         self.file_name_model = '{}/results/Lenet5_{}_{}.model.ckpt'.format(os.getcwd(), model_name, Utils.now_as_str())
         self.file_name_confusion_matrix = '{}/results/Lenet5_{}_{}.confusion_matrix.png'.format(os.getcwd(), model_name,
                                                                                                 Utils.now_as_str())
@@ -35,7 +35,8 @@ class Lenet5(object):
         self.variable_mean = variable_mean
         self.variable_stddev = variable_stddev
 
-        logging.info(mnist_dataset.summary)
+        if display_summary:
+            logging.info(mnist_dataset.summary)
 
         self.session = None
 
