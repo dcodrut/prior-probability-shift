@@ -259,7 +259,7 @@ class MNISTDataset(object):
                    np.round(self.test.label_distr, decimals=3)
                    )
 
-    def impose_distribution(self, weights, global_max_weight=None):
+    def impose_distribution(self, weights, global_max_weight=None, max_training_size=None):
         """
         Overwrites current MNIST dataset with a subset w.r.t. a given distribution
 
@@ -284,6 +284,8 @@ class MNISTDataset(object):
         self.test.reset_indices_in_epoch()
 
         train_num_examples = np.floor(np.min(self.train.counts_per_class) / max_weight).astype(np.int32)
+        if max_training_size is not None and train_num_examples > max_training_size:
+            train_num_examples = max_training_size
         # round to hundreds
         train_num_examples -= train_num_examples % 100
         train_subset_x, train_subset_y = self.train.next_batch(batch_size=train_num_examples, weights=weights)
@@ -306,6 +308,7 @@ class MNISTDataset(object):
     def impose_distr_on_train_dataset(self, subset_size, weights):
         train_subset_x, train_subset_y = self.train.next_batch(batch_size=subset_size, weights=weights)
         self._train = Dataset(train_subset_x, train_subset_y, MNISTDataset.num_classes)
+        self.backup()  # in order to overwrite the entire dataset
 
     def backup(self):
         self._train_backup = self._train
