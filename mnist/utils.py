@@ -30,7 +30,7 @@ class Utils(object):
         return 100.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1)) / predictions.shape[0]
 
     @staticmethod
-    def plot_acc_matrix(train_distributions, acc_matrix):
+    def plot_acc_matrix(train_distributions, acc_matrix, distr_matrix=None):
         """
         A function which builds the plot of the accuracies obtained from multiple tests similar to a confusion matrix.
          First, a model is considered and a set of distributions. Then that model is trained on each distribution
@@ -39,6 +39,7 @@ class Utils(object):
 
         :param train_distributions: the set of distributions considered in training
         :param acc_matrix: the accuracies obtained by training and testing a model as was described above
+        :param distr_matrix: the wrong predicted/wrong actual/correct actual distribution matrix could be placed
         :return: the resulted plot
         """
         from matplotlib import pyplot as plt
@@ -49,13 +50,12 @@ class Utils(object):
         tick_marks = np.array(range(len(train_distributions))) + 0.5
         np.set_printoptions(precision=3)
         main_fig = plt.figure(figsize=(40, 30), dpi=100)
-        main_ax = plt.subplot(1, 1, 1)
+        main_ax = plt.subplot(1, 1, 1, facecolor='w')
         ind_array = np.arange(len(train_distributions))
         x, y = np.meshgrid(ind_array, ind_array)
-        for x_val, y_val in zip(x.flatten(), y.flatten()):
-            c = acc_matrix[y_val][x_val]
-            main_ax.text(x_val, y_val, "%0.3f" % (c,), color='red', fontsize=14 * 21 / len(train_distributions),
-                         va='center', ha='center')
+        temp_fig = plt.figure()
+        temp_fig.facecolor = 1
+        temp_ax = temp_fig.add_subplot(1, 1, 1)
         im = main_ax.imshow(acc_matrix, interpolation='nearest', cmap='Greys')
         main_ax.set_yticks(tick_marks, minor=True)
         main_ax.set_xticks(tick_marks, minor=True)
@@ -75,9 +75,60 @@ class Utils(object):
         main_ax.set_xlabel('Test Distribution', fontsize=30)
         main_ax.set_ylabel('Train Distribution', fontsize=30)
         main_ax.yaxis.set_label_position('right')
+        for x_val, y_val in zip(x.flatten(), y.flatten()):
+            c = acc_matrix[y_val][x_val]
+            if distr_matrix is None:
+                vertical_offset_acc_text = 0.0
+                font_size_ref = 14
+            else:
+                vertical_offset_acc_text = -0.4
+                font_size_ref = 10
+            main_ax.text(x_val, y_val + vertical_offset_acc_text, "%0.3f" % (c,), color='red',
+                         fontsize=font_size_ref * 21 / len(train_distributions), va='center', ha='center')
+            if distr_matrix is not None:
+                current_distr = distr_matrix[y_val][x_val]
+                # current_norm_distr = current_distr / (np.sum(current_distr))
 
-        temp_fig = plt.figure()
-        temp_ax = temp_fig.add_subplot(1, 1, 1)
+                # plot the current distribution on the temporary figure
+                temp_ax.bar(range(10), current_distr)
+                temp_ax.set_xticks(range(10))
+                temp_ax.set_xticklabels(range(10), fontsize=20)
+                temp_ax.tick_params(labelsize=20)
+
+                bbox_axis = Bbox.from_bounds(x_val / len(train_distributions) + 0.01,
+                                             (len(train_distributions) - 1 - y_val) / len(train_distributions),
+                                             1.0 / len(train_distributions),
+                                             1.0 / len(train_distributions))
+                bbox_axis = TransformedBbox(bbox_axis, main_ax.transAxes)
+                bbox_image = BboxImage(bbox_axis, norm=None, origin=None, clip_on=False, zorder=1)
+
+                # draw the renderer
+                temp_fig.canvas.draw()
+
+                # Get the RGB buffer from the temporary figure and build an image using it
+                w, h = temp_fig.canvas.get_width_height()
+                buf = np.frombuffer(temp_fig.canvas.tostring_argb(), dtype=np.uint8).reshape(w, h, 4)
+                buf_copy = buf.copy()
+                temp = buf_copy[:, :, 0].copy()
+                buf_copy[:, :, 0:-1] = buf_copy[:, :, 1:]
+                buf_copy[:, :, 3] = temp
+
+                # make white pixels transparent
+                pos_white_pixels = np.logical_and(np.logical_and(buf_copy[:, :, 0] == 255, buf_copy[:, :, 1] == 255),
+                                                  buf_copy[:, :, 2] == 255)
+                buf_copy[pos_white_pixels, 3] = 0
+
+                distr_plot_image = Image.frombytes('RGBA', buf.shape[0:2], buf_copy)
+
+                # Populate the box image with the current distribution plot
+                bbox_image.set_data(distr_plot_image)
+
+                # Add it to the main figure
+                main_ax.add_artist(bbox_image)
+
+                # clear temporary figure
+                temp_ax.clear()
+
         for idx, distr in enumerate(train_distributions):
             # plot the current distribution on the temporary figure
             temp_ax.bar(range(10), distr)
