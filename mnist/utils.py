@@ -30,7 +30,7 @@ class Utils(object):
         return 100.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1)) / predictions.shape[0]
 
     @staticmethod
-    def plot_acc_matrix(train_distributions, acc_matrix, distr_matrix=None):
+    def plot_acc_matrix(train_distributions, acc_matrix, distr_matrix=None, use_percent_for_accuracies=False):
         """
         A function which builds the plot of the accuracies obtained from multiple tests similar to a confusion matrix.
          First, a model is considered and a set of distributions. Then that model is trained on each distribution
@@ -40,6 +40,7 @@ class Utils(object):
         :param train_distributions: the set of distributions considered in training
         :param acc_matrix: the accuracies obtained by training and testing a model as was described above
         :param distr_matrix: the wrong predicted/wrong actual/correct actual distribution matrix could be placed
+        :param use_percent_for_accuracies: if True, accuracy is printed in percents
         :return: the resulted plot
         """
         from matplotlib import pyplot as plt
@@ -72,9 +73,10 @@ class Utils(object):
         main_ax.set_yticklabels(range(len(train_distributions)))
         main_ax.xaxis.set_ticks_position('top')
         main_ax.tick_params(labelsize=15)
-        main_ax.set_xlabel('Test Distribution', fontsize=30)
-        main_ax.set_ylabel('Train Distribution', fontsize=30)
+        main_ax.set_xlabel('Test Distribution', fontsize=50)
+        main_ax.set_ylabel('Train Distribution', fontsize=50)
         main_ax.yaxis.set_label_position('right')
+        temp_ax.set_frame_on(False)
         for x_val, y_val in zip(x.flatten(), y.flatten()):
             c = acc_matrix[y_val][x_val]
             if distr_matrix is None:
@@ -83,8 +85,12 @@ class Utils(object):
             else:
                 vertical_offset_acc_text = -0.4
                 font_size_ref = 10
-            main_ax.text(x_val, y_val + vertical_offset_acc_text, "%0.3f" % (c,), color='red',
-                         fontsize=font_size_ref * 21 / len(train_distributions), va='center', ha='center')
+            if use_percent_for_accuracies:
+                main_ax.text(x_val, y_val + vertical_offset_acc_text, "{:0.1f}%".format(c * 100), color='red',
+                             fontsize=font_size_ref * 21 / len(train_distributions), va='center', ha='center')
+            else:
+                main_ax.text(x_val, y_val + vertical_offset_acc_text, "%0.3f" % (c,), color='red',
+                             fontsize=font_size_ref * 21 / len(train_distributions), va='center', ha='center')
             if distr_matrix is not None:
                 current_distr = distr_matrix[y_val][x_val]
                 # current_norm_distr = current_distr / (np.sum(current_distr))
@@ -129,6 +135,7 @@ class Utils(object):
                 # clear temporary figure
                 temp_ax.clear()
 
+        temp_ax.set_frame_on(True)
         for idx, distr in enumerate(train_distributions):
             # plot the current distribution on the temporary figure
             temp_ax.bar(range(10), distr)
@@ -186,3 +193,16 @@ class Utils(object):
                 return sess.run(var)
         print('Variable {} not found in {}{}\n'.format(var_name, ckpt_dir, ckpt_file))
         return None
+
+    @staticmethod
+    def get_all_files_from_dir_ending_with(directory, ending, without_file_extension=False):
+        file_list = []
+        files = os.listdir(directory)
+        files.sort(key=lambda fn: os.path.getmtime(os.path.join(directory, fn)))  # sort by date
+        for file in files:
+            if file.endswith(ending):
+                if without_file_extension:
+                    file_list.append(os.path.splitext(file)[0])
+                else:
+                    file_list.append(file)
+        return file_list
