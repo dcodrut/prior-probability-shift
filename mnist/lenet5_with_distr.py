@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tensorflow.contrib.factorization.examples import mnist
 from tensorflow.contrib.layers import flatten
 import numpy as np
 import os
@@ -235,7 +236,6 @@ class Lenet5WithDistr(object):
         # (in case if the same object is used for multiple trainings)
         self.mnist_dataset.train.reset_epochs_completed()
         self.mnist_dataset.train.reset_indices_in_epoch()
-        k = 0
         saver = tf.train.Saver(save_relative_paths=True)
         if self.session is not None:
             self.session.close()
@@ -254,6 +254,9 @@ class Lenet5WithDistr(object):
                 # count how much examples are used effectively
                 # because when imposing a distribution not all the data is used in an epoch
                 concrete_num_examples_used_in_last_epoch = 0
+
+                # start building batches with one distribution chosen randomly from distr_list
+                k = self.mnist_dataset.train.rg.randint(low=0, high=len(distrs_list))
                 for step in range(steps_per_epoch):
                     if distrs_list is None:
                         batch_x, batch_y = self.mnist_dataset.train.next_batch(self.batch_size)
