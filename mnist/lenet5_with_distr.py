@@ -86,15 +86,21 @@ class Lenet5WithDistr(object):
         mu = variable_mean
         sigma = variable_stddev
 
-        # tile y_distr in order to attach it at every image from current batch
-        distr_to_concat = tf.reshape(tf.tile(input=self.y_distr, multiples=[tf.shape(x)[0]]),
-                                     shape=[tf.shape(x)[0], distr_size])
-        self.batch_distr = distr_to_concat
+        # tile y_distr in order to attach it as input for network's layers
+        distr_to_concat_fc = tf.reshape(tf.tile(input=self.y_distr, multiples=[tf.shape(x)[0]]),
+                                        shape=[tf.shape(x)[0], distr_size])
+        self.batch_distr = distr_to_concat_fc
         # implement network architecture
         c1_weights = tf.Variable(
             tf.truncated_normal(shape=(patch_size, patch_size, color_channel, conv_layer_1_depth), mean=mu,
                                 stddev=sigma))
         c1_biases = tf.Variable(tf.zeros(conv_layer_1_depth))
+        if distr_pos[0]:
+            print('Attached distr. before C1 (at input)')
+            temp = tf.concat([tf.zeros(x.shape[2] - distr_to_concat_fc.shape[1]), self.y_distr], axis=0)
+            distr_to_concat_c = tf.reshape(tf.tile(input=temp, multiples=[tf.shape(x)[0]]),
+                                           shape=[tf.shape(x)[0], 1, int(temp.shape[0]), 1])
+            x = tf.concat([x, distr_to_concat_c], axis=1)
         c1 = tf.nn.conv2d(x, c1_weights, strides=[1, 1, 1, 1], padding='SAME') + c1_biases
         c1 = tf.nn.relu(c1)
 
@@ -105,6 +111,17 @@ class Lenet5WithDistr(object):
             tf.truncated_normal(shape=(patch_size, patch_size, conv_layer_1_depth, conv_layer_2_depth), mean=mu,
                                 stddev=sigma))
         c2_biases = tf.Variable(tf.zeros(conv_layer_2_depth))
+
+        if distr_pos[1]:
+            print('Attached distr. before C2')
+            temp = tf.concat([tf.zeros(s1.shape[2] - distr_to_concat_fc.shape[1]), self.y_distr], axis=0)
+            distr_to_concat_c = tf.reshape(tf.tile(input=temp, multiples=[tf.shape(s1)[0]]),
+                                           shape=[tf.shape(s1)[0], 1, int(temp.shape[0])])
+            new_s1 = []
+            for i in range(s1.shape[3]):
+                new_s1.append(tf.concat([s1[:, :, :, i], distr_to_concat_c], axis=1))
+            s1 = tf.stack(new_s1, axis=3)
+
         c2 = tf.nn.conv2d(s1, c2_weights, strides=[1, 1, 1, 1], padding='VALID') + c2_biases
         c2 = tf.nn.relu(c2)
 
@@ -113,9 +130,10 @@ class Lenet5WithDistr(object):
         s2 = flatten(s2)
 
         if distr_pos[2]:
-            print('F1')
-            s2 = tf.concat([s2, distr_to_concat], axis=1)
-            fc_layer_1_size += distr_size
+            print('Attached distr. before F1')
+            s2 = tf.concat([s2, distr_to_concat_fc], axis=1)
+
+        fc_layer_1_size = int(s2.shape[1])
         fc1_weights = tf.Variable(tf.truncated_normal(shape=(fc_layer_1_size, fc_layer_2_size), mean=mu, stddev=sigma))
         fc1_biases = tf.Variable(tf.zeros(fc_layer_2_size))
         fc1 = tf.matmul(s2, fc1_weights) + fc1_biases
@@ -123,9 +141,10 @@ class Lenet5WithDistr(object):
         fc1 = tf.nn.dropout(fc1, self.keep_prob, seed=self.mnist_dataset.train.seed)
 
         if distr_pos[3]:
-            print('F2')
-            fc1 = tf.concat([fc1, distr_to_concat], axis=1)
-            fc_layer_2_size += distr_size
+            print('Attached distr. before F2')
+            fc1 = tf.concat([fc1, distr_to_concat_fc], axis=1)
+
+        fc_layer_2_size = int(fc1.shape[1])
         fc2_weights = tf.Variable(tf.truncated_normal(shape=(fc_layer_2_size, fc_layer_3_size), mean=mu, stddev=sigma))
         fc2_biases = tf.Variable(tf.zeros(fc_layer_3_size))
         fc2 = tf.matmul(fc1, fc2_weights) + fc2_biases
@@ -133,8 +152,8 @@ class Lenet5WithDistr(object):
         fc2 = tf.nn.dropout(fc2, self.keep_prob, seed=self.mnist_dataset.train.seed)
 
         if distr_pos[4]:
-            print('F3')
-            fc2 = tf.concat([fc2, distr_to_concat], axis=1)
+            print('Attached distr. before F3')
+            fc2 = tf.concat([fc2, distr_to_concat_fc], axis=1)
             fc_layer_3_size += distr_size
         output_weights = tf.Variable(
             tf.truncated_normal(shape=(fc_layer_3_size, self.label_size), mean=mu, stddev=sigma))
@@ -208,8 +227,8 @@ class Lenet5WithDistr(object):
             for index in range(len(predict)):
                 if predict[index] != actual[index]:
                     wrong_predict_images.append(batch_x[index])
-        return total_loss / num_examples, total_acc / num_examples, total_predict, total_actual, wrong_predict_images, \
-               total_softmax_output_probs
+        return total_loss / num_examples, total_acc / num_examples, total_predict.astype(np.int32), \
+               total_actual.astype(np.int32), wrong_predict_images, total_softmax_output_probs
 
     def train(self, distrs_list=None):
         # reset epoch_completed and indices_in_epoch fields from mnist dataset

@@ -17,7 +17,8 @@ class Lenet5(object):
     def __init__(self, mnist_dataset, model_name='no_name', show_plot_window=False,
                  epochs=100, batch_size=500, variable_mean=0.,
                  variable_stddev=1., learning_rate=0.001, drop_out_keep_prob=0.5, display_summary=True):
-        self.file_name = '{}/results/Lenet5_{}_{}.learning_curve.png'.format(os.getcwd(), model_name, Utils.now_as_str())
+        self.file_name = '{}/results/Lenet5_{}_{}.learning_curve.png'.format(os.getcwd(), model_name,
+                                                                             Utils.now_as_str())
         self.file_name_model = '{}/results/Lenet5_{}_{}.model.ckpt'.format(os.getcwd(), model_name, Utils.now_as_str())
         self.file_name_confusion_matrix = '{}/results/Lenet5_{}_{}.confusion_matrix.png'.format(os.getcwd(), model_name,
                                                                                                 Utils.now_as_str())
@@ -164,8 +165,8 @@ class Lenet5(object):
             for index in range(len(predict)):
                 if predict[index] != actual[index]:
                     wrong_predict_images.append(batch_x[index])
-        return total_loss / num_examples, total_acc / num_examples, total_predict, total_actual, wrong_predict_images, \
-               total_softmax_output_probs
+        return total_loss / num_examples, total_acc / num_examples, total_predict.astype(np.int32), total_actual.astype(
+            np.int32), wrong_predict_images, total_softmax_output_probs
 
     def train(self):
         saver = tf.train.Saver(save_relative_paths=True)
