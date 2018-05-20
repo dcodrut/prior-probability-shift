@@ -104,11 +104,18 @@ class Dataset(object):
             start_indices = np.empty_like(self._indices_in_epoch)
             np.copyto(start_indices, self._indices_in_epoch)
             num_examples_from_each_class = np.floor(weights * batch_size).astype(np.int32)
+            # print('Imposing distr: num_examples_from_each_class = ', num_examples_from_each_class)
 
-            # if we don't have batch_size examples, add the remaining ones to the most weighted class
+            # if we don't have batch_size examples, share the remaining ones, starting with the most weighted class
             diff = batch_size - np.sum(num_examples_from_each_class)
+            # print('diff = ', diff)
             if diff > 0:
-                num_examples_from_each_class[np.argmax(weights)] += diff
+                indices_sorted_weights = np.argsort(-weights)  # sort descending
+                k = 0
+                while diff > 0:
+                    num_examples_from_each_class[indices_sorted_weights[k]] += 1
+                    diff -= 1
+                    k = (k + 1) % len(weights)
             # print('Imposing distr: num_examples_from_each_class = ', num_examples_from_each_class)
             self._indices_in_epoch += num_examples_from_each_class
             if np.sum(self._indices_in_epoch > self._counts_per_class) > 0:

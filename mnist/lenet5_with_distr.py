@@ -261,9 +261,10 @@ class Lenet5WithDistr(object):
                         distr_to_impose = distrs_list[k]
                         k = (k + 1) % len(distrs_list)
                         batch_x, batch_y = self.mnist_dataset.train.next_batch(self.batch_size, distr_to_impose)
+                        # print('Step = {} --- Distr to impose: {}'.format(step, distr_to_impose))
 
                     batch_y_distr = np.bincount(np.argmax(batch_y, axis=1)) / batch_y.shape[0]
-                    # print('Step = {} --- Imposed distribution: {}'.format(step, batch_y_distr))
+                    # print('Step = {} --- batch_y_distr: {}'.format(step, batch_y_distr))
 
                     # print(batch_y.shape)
                     _, train_loss, train_acc, batch_distr_out = self.session.run(
