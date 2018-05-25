@@ -206,3 +206,71 @@ class Utils(object):
                 else:
                     file_list.append(file)
         return file_list
+
+    @staticmethod
+    def get_indices_wrt_distr(labels, weights, global_max_weight=None, max_no_examples=None):
+        """
+          :param labels: list of labels for imposing distribution
+          :param weights: label distribution
+          :param global_max_weight: - if multiple distributions will be considered in training, than we might need the
+                                  global maximum weight value in order to build subsets of the same size for
+                                  all distributions considered, so we need to take it into account when building the
+                                  subset
+                                   - if it's None, than global_max_weight will be local maximum (i.e. the maximum value
+                                   of the current weights considered)
+          :param max_no_examples: if is not None, the subset will contain only max_no_examples samples (if possible)
+          """
+
+        if global_max_weight is None:
+            max_weight = np.max(weights)
+        else:
+            max_weight = global_max_weight
+
+        counts_per_class = np.histogram(np.argmax(labels, axis=1))[0]
+        no_examples = np.floor(np.min(counts_per_class) / max_weight).astype(np.int32)
+        if max_no_examples is not None and no_examples > max_no_examples:
+            no_examples = max_no_examples
+
+        # make sure that weights sum to 1
+        weights = np.array(weights)
+        weights = weights / sum(weights)
+        # print('weights = ', weights)
+        num_examples_from_each_class = np.floor(weights * no_examples).astype(np.int32)
+        # print('num_examples_from_each_class = ', num_examples_from_each_class)
+        # if we don't have already no_samples examples, share the remaining ones, starting with the most weighted class
+        diff = no_examples - np.sum(num_examples_from_each_class)
+        # print('diff = ', diff)
+        if diff > 0:
+            indices_sorted_weights = np.argsort(-weights)  # sort descending
+            k = 0
+            while diff > 0:
+                num_examples_from_each_class[indices_sorted_weights[k]] += 1
+                diff -= 1
+                k = (k + 1) % len(weights)
+
+        indices_wrt_distr = None
+        # k = 0
+        # while sum(num_examples_from_each_class) > 0:
+        #     if num_examples_from_each_class[labels[k]] > 0:
+        #         indices_wrt_distr.append(k)
+        #         num_examples_from_each_class[labels[k]] -= 1
+        #     k += 1
+
+        indices_per_class = (np.arange(10) == np.argmax(labels, axis=1)[:, np.newaxis])
+        for i in range(10):
+            if num_examples_from_each_class[i] > 0:
+                indices_of_class_i = np.where(indices_per_class[:, i] == True)[0]
+                # print(indices_of_class_i[0:num_examples_from_each_class[i]])
+                # print(np.sum(indices_of_class_i[0:num_examples_from_each_class[i]]))
+                if indices_wrt_distr is None:
+                    indices_wrt_distr = indices_of_class_i[0:num_examples_from_each_class[i]]
+                else:
+                    indices_wrt_distr = np.append(indices_wrt_distr, indices_of_class_i[0:num_examples_from_each_class[i]])
+
+        # shuffle images inside batch because they're ordered by label
+        perm = np.arange(no_examples)
+        from dataset import Dataset
+        Dataset.rg.shuffle(perm)
+        indices_wrt_distr = indices_wrt_distr[perm]
+
+        return indices_wrt_distr
