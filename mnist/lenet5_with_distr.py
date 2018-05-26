@@ -18,11 +18,12 @@ class Lenet5WithDistr(object):
 
     def __init__(self, mnist_dataset, model_name='no_name', show_plot_window=False,
                  epochs=100, batch_size=500, variable_mean=0.,
-                 variable_stddev=1., learning_rate=0.001, drop_out_keep_prob=0.5, display_summary=True,
+                 variable_stddev=1., learning_rate=0.001, drop_out_keep_prob=0.5, verbose=True,
                  distr_pos=[False, False, False, False, False]):
 
         if distr_pos is None:
             distr_pos = [False, False, False, False, False]
+        self.verbose = verbose
         self.file_name = '{}/results/Lenet5_{}_{}.learning_curve.png'.format(os.getcwd(), model_name,
                                                                              Utils.now_as_str())
         self.file_name_model = '{}/results/Lenet5_{}_{}.model.ckpt'.format(os.getcwd(), model_name, Utils.now_as_str())
@@ -42,7 +43,7 @@ class Lenet5WithDistr(object):
         self.variable_mean = variable_mean
         self.variable_stddev = variable_stddev
 
-        if display_summary:
+        if self.verbose:
             logging.info(mnist_dataset.summary)
 
         self.session = None
@@ -97,7 +98,8 @@ class Lenet5WithDistr(object):
                                 stddev=sigma))
         c1_biases = tf.Variable(tf.zeros(conv_layer_1_depth))
         if distr_pos[0]:
-            print('Attached distr. before C1 (at input)')
+            if self.verbose:
+                print('Attached distr. before C1 (at input)')
             temp = tf.concat([tf.zeros(x.shape[2] - distr_to_concat_fc.shape[1]), self.y_distr], axis=0)
             distr_to_concat_c = tf.reshape(tf.tile(input=temp, multiples=[tf.shape(x)[0]]),
                                            shape=[tf.shape(x)[0], 1, int(temp.shape[0]), 1])
@@ -114,7 +116,8 @@ class Lenet5WithDistr(object):
         c2_biases = tf.Variable(tf.zeros(conv_layer_2_depth))
 
         if distr_pos[1]:
-            print('Attached distr. before C2')
+            if self.verbose:
+                print('Attached distr. before C2')
             temp = tf.concat([tf.zeros(s1.shape[2] - distr_to_concat_fc.shape[1]), self.y_distr], axis=0)
             distr_to_concat_c = tf.reshape(tf.tile(input=temp, multiples=[tf.shape(s1)[0]]),
                                            shape=[tf.shape(s1)[0], 1, int(temp.shape[0])])
@@ -131,7 +134,8 @@ class Lenet5WithDistr(object):
         s2 = flatten(s2)
 
         if distr_pos[2]:
-            print('Attached distr. before F1')
+            if self.verbose:
+                print('Attached distr. before F1')
             s2 = tf.concat([s2, distr_to_concat_fc], axis=1)
 
         fc_layer_1_size = int(s2.shape[1])
@@ -142,7 +146,8 @@ class Lenet5WithDistr(object):
         fc1 = tf.nn.dropout(fc1, self.keep_prob, seed=self.mnist_dataset.train.seed)
 
         if distr_pos[3]:
-            print('Attached distr. before F2')
+            if self.verbose:
+                print('Attached distr. before F2')
             fc1 = tf.concat([fc1, distr_to_concat_fc], axis=1)
 
         fc_layer_2_size = int(fc1.shape[1])
@@ -153,7 +158,8 @@ class Lenet5WithDistr(object):
         fc2 = tf.nn.dropout(fc2, self.keep_prob, seed=self.mnist_dataset.train.seed)
 
         if distr_pos[4]:
-            print('Attached distr. before F3')
+            if self.verbose:
+                print('Attached distr. before F3')
             fc2 = tf.concat([fc2, distr_to_concat_fc], axis=1)
             fc_layer_3_size += distr_size
         output_weights = tf.Variable(
@@ -161,15 +167,16 @@ class Lenet5WithDistr(object):
         output_biases = tf.Variable(tf.zeros(self.label_size))
         logits = tf.matmul(fc2, output_weights) + output_biases
 
-        logging.debug('Network layers size:\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}'.format(
-            x.get_shape().as_list(),
-            c1.get_shape().as_list(),
-            s1.get_shape().as_list(),
-            c2.get_shape().as_list(),
-            s2.get_shape().as_list(),
-            fc1.get_shape().as_list(),
-            fc2.get_shape().as_list(),
-            logits.get_shape().as_list()))
+        if self.verbose:
+            logging.debug('Network layers size:\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}'.format(
+                x.get_shape().as_list(),
+                c1.get_shape().as_list(),
+                s1.get_shape().as_list(),
+                c2.get_shape().as_list(),
+                s2.get_shape().as_list(),
+                fc1.get_shape().as_list(),
+                fc2.get_shape().as_list(),
+                logits.get_shape().as_list()))
 
         return logits
 
@@ -256,7 +263,8 @@ class Lenet5WithDistr(object):
                 concrete_num_examples_used_in_last_epoch = 0
 
                 # start building batches with one distribution chosen randomly from distr_list
-                k = self.mnist_dataset.train.rg.randint(low=0, high=len(distrs_list))
+                if distrs_list is not None:
+                    k = self.mnist_dataset.train.rg.randint(low=0, high=len(distrs_list))
                 for step in range(steps_per_epoch):
                     if distrs_list is None:
                         batch_x, batch_y = self.mnist_dataset.train.next_batch(self.batch_size)
