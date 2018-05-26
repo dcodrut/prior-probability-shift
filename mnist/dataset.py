@@ -137,29 +137,35 @@ class Dataset(object):
                     '\n\tCounts per class needed to build the batch = ' + str(num_examples_from_each_class)
 
             end_indices = self._indices_in_epoch
-            # print(end_indices)
-            # print(sum(end_indices))
-            batch_x = np.empty((batch_size,) + self._images[0].shape)
+            batch_x = np.empty((batch_size,) + self._images[0].shape, dtype=np.float32)
             batch_y = np.empty((batch_size, self._num_classes))
             start_index_in_batch = 0
+            # print('num_examples_from_each_class = ', num_examples_from_each_class)
             # print('start_indices = ', start_indices)
             # print('end_indices = ', end_indices)
+            # indices_wrt_distr = None
             for i in range(self.num_classes):
                 if num_examples_from_each_class[i] > 0:
                     images_of_class_i = self._images[self._indices_per_class[:, i],]
                     labels_of_class_i = self._labels[self._indices_per_class[:, i],]
+                    # indices_of_class_i = np.where(self._indices_per_class[:, i] == True)[0]
                     end_index_in_batch = start_index_in_batch + num_examples_from_each_class[i]
                     batch_x[start_index_in_batch:end_index_in_batch, ] = \
                         images_of_class_i[start_indices[i]:end_indices[i], ]
                     batch_y[start_index_in_batch:end_index_in_batch] = labels_of_class_i[
                                                                        start_indices[i]:end_indices[i]]
                     start_index_in_batch = end_index_in_batch
-
+                    # if indices_wrt_distr is None:
+                    #     indices_wrt_distr = indices_of_class_i[start_indices[i]:end_indices[i]]
+                    # else:
+                    #     indices_wrt_distr = np.append(indices_wrt_distr,
+                    #                                   indices_of_class_i[start_indices[i]:end_indices[i]])
             # shuffle images inside batch because they're ordered by label
             perm = np.arange(batch_size)
             Dataset.rg.shuffle(perm)
             batch_x = batch_x[perm,]
             batch_y = batch_y[perm,]
+            # indices_wrt_distr = indices_wrt_distr[perm]
 
         return batch_x, batch_y
 
@@ -277,6 +283,8 @@ class MNISTDataset(object):
                                 subset
                                  - if it's None, than global_max_weight will be local maximum (i.e. the maximum value
                                  of the current weights considered)
+         :param max_training_size: if is not None, the subset will contain max_trining_size samples (if possible)
+
         """
 
         if global_max_weight is None:
