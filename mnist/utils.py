@@ -185,12 +185,8 @@ class Utils(object):
     @staticmethod
     def restore_variable_from_checkpoint(ckpt_dir, ckpt_file, var_name):
         reader = tf.train.NewCheckpointReader(os.path.join(ckpt_dir, ckpt_file))
-        for var in tf.global_variables():
-            if var.name.split(':')[0] == var_name and reader.has_tensor(var_name):
-                saver = tf.train.Saver([var])
-                sess = tf.Session()
-                saver.restore(sess=sess, save_path=os.path.join(ckpt_dir, ckpt_file))
-                return sess.run(var)
+        if reader.has_tensor(var_name):
+            return reader.get_tensor(var_name)
         print('Variable {} not found in {}{}\n'.format(var_name, ckpt_dir, ckpt_file))
         return None
 
@@ -270,6 +266,7 @@ class Utils(object):
         # shuffle images inside batch because they're ordered by label
         perm = np.arange(no_examples)
         from dataset import Dataset
+        # Dataset.reset_rg()
         Dataset.rg.shuffle(perm)
         indices_wrt_distr = indices_wrt_distr[perm]
 
