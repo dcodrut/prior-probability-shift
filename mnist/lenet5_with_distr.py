@@ -1,5 +1,4 @@
 import tensorflow as tf
-from tensorflow.contrib.factorization.examples import mnist
 from tensorflow.contrib.layers import flatten
 import numpy as np
 import os
@@ -202,7 +201,7 @@ class Lenet5WithDistr(object):
             total_loss += (loss * batch_x.shape[0])
         return total_loss / num_examples, total_acc / num_examples
 
-    def test_data(self, dataset, use_only_one_batch=True):
+    def test_data(self, dataset, use_only_one_batch=True, distr_to_attach=None):
         if not use_only_one_batch:
             test_batch_size = self.batch_size  # use train batch size
             steps_per_epoch = dataset.num_examples // test_batch_size
@@ -219,7 +218,11 @@ class Lenet5WithDistr(object):
         sess = self.session
         for step in range(steps_per_epoch):
             batch_x, batch_y = dataset.next_batch(test_batch_size)
-            batch_y_distr = np.bincount(np.argmax(batch_y, axis=1)) / batch_y.shape[0]
+            if distr_to_attach is None:
+                batch_y_distr = np.bincount(np.argmax(batch_y, axis=1),
+                                            minlength=self.mnist_dataset.num_classes) / batch_y.shape[0]
+            else:
+                batch_y_distr = distr_to_attach
             loss, acc, predict, actual, logits = sess.run(
                 [self.loss_op, self.accuracy_op, tf.argmax(self.network, 1), tf.argmax(self.y, 1), self.network],
                 feed_dict={self.x: batch_x, self.y: batch_y, self.y_distr: batch_y_distr, self.keep_prob: 1.0})
