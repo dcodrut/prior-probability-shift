@@ -162,6 +162,7 @@ class Dataset(object):
                     #                                   indices_of_class_i[start_indices[i]:end_indices[i]])
             # shuffle images inside batch because they're ordered by label
             perm = np.arange(batch_size)
+            # Dataset.reset_rg()
             Dataset.rg.shuffle(perm)
             batch_x = batch_x[perm,]
             batch_y = batch_y[perm,]
@@ -272,7 +273,7 @@ class MNISTDataset(object):
                    np.round(self.test.label_distr, decimals=3)
                    )
 
-    def impose_distribution(self, weights, global_max_weight=None, max_training_size=None):
+    def impose_distribution(self, weights, global_max_weight=None, max_training_size=None, max_test_size=None):
         """
         Overwrites current MNIST dataset with a subset w.r.t. a given distribution
 
@@ -283,7 +284,8 @@ class MNISTDataset(object):
                                 subset
                                  - if it's None, than global_max_weight will be local maximum (i.e. the maximum value
                                  of the current weights considered)
-         :param max_training_size: if is not None, the subset will contain max_trining_size samples (if possible)
+         :param max_training_size: if is not None, the train subset will contain max_training_size samples (if possible)
+         :param max_test_size: if is not None, the test subset will contain max_test_size samples (if possible)
 
         """
 
@@ -299,10 +301,11 @@ class MNISTDataset(object):
         self.test.reset_indices_in_epoch()
 
         train_num_examples = np.floor(np.min(self.train.counts_per_class) / max_weight).astype(np.int32)
-        if max_training_size is not None and train_num_examples > max_training_size:
-            train_num_examples = max_training_size
         # round to hundreds
         train_num_examples -= train_num_examples % 100
+
+        if max_training_size is not None and train_num_examples > max_training_size:
+            train_num_examples = max_training_size
         train_subset_x, train_subset_y = self.train.next_batch(batch_size=train_num_examples, weights=weights)
 
         validation_num_examples = np.floor(np.min(self.validation.counts_per_class) / max_weight).astype(np.int32)
@@ -314,8 +317,10 @@ class MNISTDataset(object):
         test_num_examples = np.floor(np.min(self.test.counts_per_class) / max_weight).astype(np.int32)
         # round to hundreds
         test_num_examples -= test_num_examples % 100
-        test_subset_x, test_subset_y = self.test.next_batch(batch_size=test_num_examples, weights=weights)
+        if max_test_size is not None and test_num_examples > max_test_size:
+            test_num_examples = max_test_size
 
+        test_subset_x, test_subset_y = self.test.next_batch(batch_size=test_num_examples, weights=weights)
         self._train = Dataset(train_subset_x, train_subset_y, MNISTDataset.num_classes)
         self._validation = Dataset(validation_subset_x, validation_subset_y, MNISTDataset.num_classes)
         self._test = Dataset(test_subset_x, test_subset_y, MNISTDataset.num_classes)
