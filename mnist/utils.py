@@ -1,7 +1,8 @@
-import numpy as np
-import tensorflow as tf
 import os
 from datetime import datetime
+
+import numpy as np
+import tensorflow as tf
 
 
 class Utils(object):
@@ -205,6 +206,7 @@ class Utils(object):
 
     @staticmethod
     def get_indices_wrt_distr(labels, weights, global_max_weight=None, max_no_examples=None):
+        from dataset import Dataset
         """
           :param labels: list of labels for imposing distribution
           :param weights: label distribution
@@ -222,7 +224,7 @@ class Utils(object):
         else:
             max_weight = global_max_weight
 
-        counts_per_class = np.histogram(np.argmax(labels, axis=1))[0]
+        counts_per_class = np.bincount(labels, minlength=10)
         no_examples = np.floor(np.min(counts_per_class) / max_weight).astype(np.int32)
         if max_no_examples is not None and no_examples > max_no_examples:
             no_examples = max_no_examples
@@ -252,22 +254,17 @@ class Utils(object):
         #         num_examples_from_each_class[labels[k]] -= 1
         #     k += 1
 
-        indices_per_class = (np.arange(10) == np.argmax(labels, axis=1)[:, np.newaxis])
+        indices_per_class = (np.arange(10) == labels[:, np.newaxis])
         for i in range(10):
             if num_examples_from_each_class[i] > 0:
                 indices_of_class_i = np.where(indices_per_class[:, i] == True)[0]
                 # print(indices_of_class_i[0:num_examples_from_each_class[i]])
                 # print(np.sum(indices_of_class_i[0:num_examples_from_each_class[i]]))
+                random_indices_to_append = indices_of_class_i[
+                    Dataset.rg.randint(0, counts_per_class[i], num_examples_from_each_class[i])]
                 if indices_wrt_distr is None:
-                    indices_wrt_distr = indices_of_class_i[0:num_examples_from_each_class[i]]
+                    indices_wrt_distr = random_indices_to_append
                 else:
-                    indices_wrt_distr = np.append(indices_wrt_distr, indices_of_class_i[0:num_examples_from_each_class[i]])
-
-        # shuffle images inside batch because they're ordered by label
-        perm = np.arange(no_examples)
-        from dataset import Dataset
-        # Dataset.reset_rg()
-        Dataset.rg.shuffle(perm)
-        indices_wrt_distr = indices_wrt_distr[perm]
+                    indices_wrt_distr = np.append(indices_wrt_distr, random_indices_to_append)
 
         return indices_wrt_distr
