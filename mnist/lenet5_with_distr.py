@@ -193,7 +193,8 @@ class Lenet5WithDistr(object):
         # tf.get_default_session()
         for step in range(steps_per_epoch):
             batch_x, batch_y = dataset.next_batch(validation_batch_size)
-            batch_y_distr = np.bincount(np.argmax(batch_y, axis=1)) / batch_y.shape[0]
+            batch_y_distr = np.bincount(np.argmax(batch_y, axis=1),
+                                        minlength=self.mnist_dataset.num_classes) / batch_y.shape[0]
             loss, acc = sess.run([self.loss_op, self.accuracy_op], feed_dict={self.x: batch_x, self.y: batch_y,
                                                                               self.y_distr: batch_y_distr,
                                                                               self.keep_prob: 1.0})
@@ -277,7 +278,8 @@ class Lenet5WithDistr(object):
                         batch_x, batch_y = self.mnist_dataset.train.next_batch(self.batch_size, distr_to_impose)
                         # print('Step = {} --- Distr to impose: {}'.format(step, distr_to_impose))
 
-                    batch_y_distr = np.bincount(np.argmax(batch_y, axis=1)) / batch_y.shape[0]
+                    batch_y_distr = np.bincount(np.argmax(batch_y, axis=1),
+                                                minlength=self.mnist_dataset.num_classes) / batch_y.shape[0]
                     # print('Step = {} --- batch_y_distr: {}'.format(step, batch_y_distr))
 
                     # print(batch_y.shape)
