@@ -293,8 +293,8 @@ class Lenet5WithDistr(object):
                     concrete_num_examples_used_in_last_epoch += batch_x.shape[0]
 
                     # generating a batch w.r.t a distr. can cause finishing an epoch earlier
-                    if self.mnist_dataset.train.epochs_completed > i:
-                        break
+                    # if self.mnist_dataset.train.epochs_completed > i:
+                    #     break
 
                 total_tran_loss = total_tran_loss / concrete_num_examples_used_in_last_epoch
                 total_tran_acc = total_tran_acc / concrete_num_examples_used_in_last_epoch
