@@ -31,7 +31,8 @@ class Utils(object):
         return 100.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1)) / predictions.shape[0]
 
     @staticmethod
-    def plot_acc_matrix(train_distributions, acc_matrix, distr_matrix=None, use_percent_for_accuracies=False):
+    def plot_acc_matrix(train_distributions, acc_matrix, distr_matrix=None, use_percent_for_accuracies=False,
+                        std_matrix=None):
         """
         A function which builds the plot of the accuracies obtained from multiple tests similar to a confusion matrix.
          First, a model is considered and a set of distributions. Then that model is trained on each distribution
@@ -42,6 +43,7 @@ class Utils(object):
         :param acc_matrix: the accuracies obtained by training and testing a model as was described above
         :param distr_matrix: the wrong predicted/wrong actual/correct actual distribution matrix could be placed
         :param use_percent_for_accuracies: if True, accuracy is printed in percents
+        :param std_matrix: standard deviation matrix, for the case when acc_matrix is an average
         :return: the resulted plot
         """
         from matplotlib import pyplot as plt
@@ -80,6 +82,8 @@ class Utils(object):
         temp_ax.set_frame_on(False)
         for x_val, y_val in zip(x.flatten(), y.flatten()):
             c = acc_matrix[y_val][x_val]
+            if std_matrix is not None:
+                d = std_matrix[y_val][x_val]
             if distr_matrix is None:
                 vertical_offset_acc_text = 0.0
                 font_size_ref = 14
@@ -87,11 +91,18 @@ class Utils(object):
                 vertical_offset_acc_text = -0.4
                 font_size_ref = 10
             if use_percent_for_accuracies:
-                main_ax.text(x_val, y_val + vertical_offset_acc_text, "{:0.1f}%".format(c * 100), color='red',
-                             fontsize=font_size_ref * 21 / len(train_distributions), va='center', ha='center')
+                if std_matrix is None:
+                    text_to_print = "{:0.1f}%".format(c * 100)
+                else:
+                    text_to_print = "{:0.1f}%\n\u00B1{:0.1f}%".format(c * 100, d * 100)
             else:
-                main_ax.text(x_val, y_val + vertical_offset_acc_text, "%0.3f" % (c,), color='red',
-                             fontsize=font_size_ref * 21 / len(train_distributions), va='center', ha='center')
+                if std_matrix is None:
+                    text_to_print = "{:0.3f}".format(c)
+                else:
+                    text_to_print = "{:0.3f}\n\u00B1{:0.3f}".format(c, d)
+
+            main_ax.text(x_val, y_val + vertical_offset_acc_text, text_to_print, color='red',
+                         fontsize=font_size_ref * 21 / len(train_distributions), va='center', ha='center')
             if distr_matrix is not None:
                 current_distr = distr_matrix[y_val][x_val]
                 # current_norm_distr = current_distr / (np.sum(current_distr))
