@@ -32,7 +32,7 @@ class Utils(object):
 
     @staticmethod
     def plot_acc_matrix(train_distributions, acc_matrix, distr_matrix=None, use_percent_for_accuracies=False,
-                        std_matrix=None):
+                        std_matrix=None, title=None):
         """
         A function which builds the plot of the accuracies obtained from multiple tests similar to a confusion matrix.
          First, a model is considered and a set of distributions. Then that model is trained on each distribution
@@ -44,6 +44,7 @@ class Utils(object):
         :param distr_matrix: the wrong predicted/wrong actual/correct actual distribution matrix could be placed
         :param use_percent_for_accuracies: if True, accuracy is printed in percents
         :param std_matrix: standard deviation matrix, for the case when acc_matrix is an average
+        :param title: main title of figure
         :return: the resulted plot
         """
         from matplotlib import pyplot as plt
@@ -67,7 +68,8 @@ class Utils(object):
         main_ax.yaxis.set_ticks_position('none')
         main_ax.grid(True, which='minor', linestyle='-')
         main_fig.subplots_adjust(bottom=0.15)
-        main_ax.set_title('')
+        if title is not None:
+            main_ax.set_title(title, y=1.15, fontsize=75)
         main_fig.colorbar(im)
         xlocations = np.array(range(len(train_distributions)))
         main_ax.set_xticks(xlocations)
@@ -109,6 +111,7 @@ class Utils(object):
 
                 # plot the current distribution on the temporary figure
                 temp_ax.bar(range(10), current_distr)
+                # temp_ax.set_ylim(bottom=0, top=np.max(distr_matrix[y_val, :]))
                 temp_ax.set_xticks(range(10))
                 temp_ax.set_xticklabels(range(10), fontsize=20)
                 temp_ax.tick_params(labelsize=20)
