@@ -1,9 +1,11 @@
+import logging.config
+import os
+
+import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.layers import flatten
-import numpy as np
-import os
+
 from training_plotter import TrainingPlotter
-import logging.config
 from utils import Utils
 
 logging.config.fileConfig('logging.conf')
@@ -227,6 +229,7 @@ class Lenet5WithDistr(object):
             loss, acc, predict, actual, logits = sess.run(
                 [self.loss_op, self.accuracy_op, tf.argmax(self.network, 1), tf.argmax(self.y, 1), self.network],
                 feed_dict={self.x: batch_x, self.y: batch_y, self.y_distr: batch_y_distr, self.keep_prob: 1.0})
+
             total_acc += (acc * batch_x.shape[0])
             total_loss += (loss * batch_x.shape[0])
             total_predict = np.append(total_predict, predict)
@@ -241,6 +244,19 @@ class Lenet5WithDistr(object):
                     wrong_predict_images.append(batch_x[index])
         return total_loss / num_examples, total_acc / num_examples, total_predict.astype(np.int32), \
                total_actual.astype(np.int32), wrong_predict_images, total_softmax_output_probs
+
+    def test_on_only_an_image(self, image, label, distr_to_attach=[0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+                              get_output_probs=False):
+        batch_x = image[None, :, :, :]
+        batch_y = label[None, :]
+        loss, acc, predict, actual, logits = self.session.run(
+            [self.loss_op, self.accuracy_op, tf.argmax(self.network, 1), tf.argmax(self.y, 1), self.network],
+            feed_dict={self.x: batch_x, self.y: batch_y, self.y_distr: distr_to_attach, self.keep_prob: 1.0})
+        if get_output_probs:
+            softmax_output_probs = tf.Session().run(tf.nn.softmax(logits=logits))
+            return loss, acc, predict.astype(np.int32), actual.astype(np.int32), softmax_output_probs
+        else:
+            return loss, acc, predict.astype(np.int32), actual.astype(np.int32)
 
     def train(self, distrs_list=None):
         # reset epoch_completed and indices_in_epoch fields from mnist dataset
