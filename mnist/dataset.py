@@ -1,7 +1,7 @@
 from sklearn.model_selection import train_test_split
-from utils import Utils
+
 from enhance_data import *
-import numpy as np
+from utils import Utils
 
 
 class Dataset(object):
@@ -328,6 +328,33 @@ class MNISTDataset(object):
     def impose_distr_on_train_dataset(self, subset_size, weights):
         train_subset_x, train_subset_y = self.train.next_batch(batch_size=subset_size, weights=weights)
         self._train = Dataset(train_subset_x, train_subset_y, MNISTDataset.num_classes)
+        self.backup()  # in order to overwrite the entire dataset
+
+    def oversampling_train_dataset_wrt_distr(self, weights):
+        current_train_distr = self._train.label_distr
+        target_train_distr = weights
+        current_train_distr[current_train_distr == 0] = 1  # for preventing devide by zero
+        ratio = (target_train_distr / current_train_distr) / np.min((target_train_distr / current_train_distr))
+        target_counts = np.floor(self._train.counts_per_class * ratio).astype(np.int32)
+        new_indices = np.empty(np.sum(target_counts), dtype=np.int32)
+        pos = 0
+        for i_class in range(self.num_classes):
+            current_count_i_class = self.train.counts_per_class[i_class]
+            if current_count_i_class == 0:
+                continue
+            new_class_i_indices = np.empty(target_counts[i_class], dtype=np.int32)
+            indices_of_class_i = np.where(self.train._indices_per_class[:, i_class])[0]
+            k = 0
+            while k < target_counts[i_class]:
+                if target_counts[i_class] > (k + current_count_i_class):
+                    count_to_add = current_count_i_class
+                else:
+                    count_to_add = target_counts[i_class] - k
+                new_class_i_indices[k:k + count_to_add] = indices_of_class_i[0:count_to_add]
+                k += count_to_add
+            new_indices[pos:pos + target_counts[i_class]] = new_class_i_indices
+            pos += target_counts[i_class]
+        self._train = Dataset(self.train.images[new_indices], self.train.labels[new_indices], MNISTDataset.num_classes)
         self.backup()  # in order to overwrite the entire dataset
 
     def backup(self):
