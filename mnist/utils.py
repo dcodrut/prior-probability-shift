@@ -31,8 +31,8 @@ class Utils(object):
         return 100.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1)) / predictions.shape[0]
 
     @staticmethod
-    def plot_acc_matrix(train_distributions, acc_matrix, distr_matrix=None, use_percent_for_accuracies=False,
-                        std_matrix=None, title=None):
+    def plot_acc_matrix(train_distributions, acc_matrix, test_distributions=None,  distr_matrix=None,
+                        use_percent_for_accuracies=False, std_matrix=None, title=None):
         """
         A function which builds the plot of the accuracies obtained from multiple tests similar to a confusion matrix.
          First, a model is considered and a set of distributions. Then that model is trained on each distribution
@@ -41,6 +41,7 @@ class Utils(object):
 
         :param train_distributions: the set of distributions considered in training
         :param acc_matrix: the accuracies obtained by training and testing a model as was described above
+        :param test_distributions: the set of distributions used for testing; if None, train_distributions are considered
         :param distr_matrix: the wrong predicted/wrong actual/correct actual distribution matrix could be placed
         :param use_percent_for_accuracies: if True, accuracy is printed in percents
         :param std_matrix: standard deviation matrix, for the case when acc_matrix is an average
@@ -51,6 +52,11 @@ class Utils(object):
         from PIL import Image
         from matplotlib.image import BboxImage
         from matplotlib.transforms import Bbox, TransformedBbox
+
+        if test_distributions is None:
+            test_distributions = train_distributions
+
+        assert(len(train_distributions) == len(test_distributions))
 
         tick_marks = np.array(range(len(train_distributions))) + 0.5
         np.set_printoptions(precision=3)
@@ -70,14 +76,15 @@ class Utils(object):
         main_fig.subplots_adjust(bottom=0.15)
         if title is not None:
             main_ax.set_title(title, y=1.15, fontsize=75)
-        main_fig.colorbar(im)
+        cb = main_fig.colorbar(im)
+        cb.ax.set_yticklabels(cb.ax.get_yticklabels(), fontsize=30)
         xlocations = np.array(range(len(train_distributions)))
         main_ax.set_xticks(xlocations)
         main_ax.set_xticklabels(range(len(train_distributions)))
         main_ax.set_yticks(xlocations)
         main_ax.set_yticklabels(range(len(train_distributions)))
         main_ax.xaxis.set_ticks_position('top')
-        main_ax.tick_params(labelsize=15)
+        main_ax.tick_params(labelsize=20)
         main_ax.set_xlabel('Test Distribution', fontsize=50)
         main_ax.set_ylabel('Train Distribution', fontsize=50)
         main_ax.yaxis.set_label_position('right')
@@ -151,21 +158,15 @@ class Utils(object):
                 temp_ax.clear()
 
         temp_ax.set_frame_on(True)
-        for idx, distr in enumerate(train_distributions):
+
+        for idx, train_distr in enumerate(train_distributions):
             # plot the current distribution on the temporary figure
-            temp_ax.bar(range(10), distr)
+            temp_ax.bar(range(10), train_distr)
             temp_ax.set_xticks(range(10))
             temp_ax.set_xticklabels(range(10), fontsize=20)
             temp_ax.tick_params(labelsize=20)
 
-            # build 2 box images (one for x_axis, one for y_axis) which will be populated with the current distr. plot
-            bbox_x_axis = Bbox.from_bounds(1.0 * idx / len(train_distributions),
-                                           1.015,
-                                           1.0 / len(train_distributions),
-                                           1.0 / len(train_distributions))
-            bbox_x_axis = TransformedBbox(bbox_x_axis, main_ax.transAxes)
-            bbox_image_x_axis = BboxImage(bbox_x_axis, norm=None, origin=None, clip_on=False)
-
+            # build a box images which will be populated with the current train_distr. plot
             bbox_y_axis = Bbox.from_bounds(- 1.3 / len(train_distributions),
                                            1.0 * (len(train_distributions) - idx - 1) / len(train_distributions),
                                            1.0 / len(train_distributions),
@@ -182,12 +183,42 @@ class Utils(object):
             distr_plot_image = Image.frombytes('RGB', buf.shape[0:2], buf)
 
             # Populate the box image with the current distribution plot
-            bbox_image_x_axis.set_data(distr_plot_image)
             bbox_image_y_axis.set_data(distr_plot_image)
 
             # Add it to the main figure
-            main_ax.add_artist(bbox_image_x_axis)
             main_ax.add_artist(bbox_image_y_axis)
+
+            # clear temporary figure
+            temp_ax.clear()
+
+        for idx, test_distr in enumerate(test_distributions):
+            # plot the current distribution on the temporary figure
+            temp_ax.bar(range(10), test_distr)
+            temp_ax.set_xticks(range(10))
+            temp_ax.set_xticklabels(range(10), fontsize=20)
+            temp_ax.tick_params(labelsize=20)
+
+            # build a box images which will be populated with the current train_distr. plot
+            bbox_x_axis = Bbox.from_bounds(1.0 * idx / len(test_distributions),
+                                           1.015,
+                                           1.0 / len(test_distributions),
+                                           1.0 / len(test_distributions))
+            bbox_x_axis = TransformedBbox(bbox_x_axis, main_ax.transAxes)
+            bbox_image_x_axis = BboxImage(bbox_x_axis, norm=None, origin=None, clip_on=False)
+
+            # draw the renderer
+            temp_fig.canvas.draw()
+
+            # Get the RGB buffer from the temporary figure and build an image using it
+            w, h = temp_fig.canvas.get_width_height()
+            buf = np.frombuffer(temp_fig.canvas.tostring_rgb(), dtype=np.uint8).reshape(w, h, 3)
+            distr_plot_image = Image.frombytes('RGB', buf.shape[0:2], buf)
+
+            # Populate the box image with the current distribution plot
+            bbox_image_x_axis.set_data(distr_plot_image)
+
+            # Add it to the main figure
+            main_ax.add_artist(bbox_image_x_axis)
 
             # clear temporary figure
             temp_ax.clear()
