@@ -1,9 +1,11 @@
+import logging.config
+import os
+
+import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.layers import flatten
-import numpy as np
-import os
+
 from training_plotter import TrainingPlotter
-import logging.config
 from utils import Utils
 
 logging.config.fileConfig('logging.conf')
@@ -14,16 +16,17 @@ class Lenet5(object):
         Implements a classic Lenet5 architecture and some methods for training, test and evaluation
     """
 
-    def __init__(self, mnist_dataset, model_name='no_name', show_plot_window=False,
+    def __init__(self, mnist_dataset, save_dir='results/', model_name='no_name', show_plot_window=False,
                  epochs=100, batch_size=500, variable_mean=0.,
                  variable_stddev=1., learning_rate=0.001, drop_out_keep_prob=0.5, display_summary=True):
-        self.file_name = '{}/results/Lenet5_{}_{}.learning_curve.png'.format(os.getcwd(), model_name,
-                                                                             Utils.now_as_str())
-        self.file_name_model = '{}/results/Lenet5_{}_{}.model.ckpt'.format(os.getcwd(), model_name, Utils.now_as_str())
-        self.file_name_confusion_matrix = '{}/results/Lenet5_{}_{}.confusion_matrix.png'.format(os.getcwd(), model_name,
-                                                                                                Utils.now_as_str())
-        self.file_name_wrong_predicts = '{}/results/Lenet5_{}_{}.wrong_predicts.png'.format(os.getcwd(), model_name,
-                                                                                            Utils.now_as_str())
+        save_dir_full_path = os.path.join(os.getcwd(), os.path.dirname(save_dir))
+        self.file_name = '{}/Lenet5_{}_{}.learning_curve.png'.format(save_dir_full_path, model_name,
+                                                                     Utils.now_as_str())
+        self.file_name_model = '{}/Lenet5_{}_{}.model.ckpt'.format(save_dir_full_path, model_name, Utils.now_as_str())
+        self.file_name_confusion_matrix = '{}/Lenet5_{}_{}.confusion_matrix.png'.format(save_dir_full_path, model_name,
+                                                                                        Utils.now_as_str())
+        self.file_name_wrong_predicts = '{}/Lenet5_{}_{}.wrong_predicts.png'.format(save_dir_full_path, model_name,
+                                                                                    Utils.now_as_str())
         title = "{}_{}_epochs_{}_batch_size_{}_learning_rate_{}_keep_prob_{}_variable_stddev_{}".format(
             self.__class__.__name__, model_name, epochs, batch_size, learning_rate, drop_out_keep_prob, variable_stddev)
         self.plotter = TrainingPlotter(title, self.file_name, show_plot_window=show_plot_window)
@@ -49,6 +52,10 @@ class Lenet5(object):
 
         self.y = tf.placeholder(tf.float32, (None, self.label_size))
         self.train_distr = tf.Variable(initial_value=self.mnist_dataset.train.label_distr, name='train_distr')
+        self.test_distr = tf.Variable(initial_value=self.mnist_dataset.test.label_distr, name='test_distr')
+        self.train_num_examples = tf.Variable(initial_value=self.mnist_dataset.train.num_examples,
+                                              name='train_num_examples')
+
         self.keep_prob = tf.placeholder(tf.float32)
         self.drop_out_keep_prob = drop_out_keep_prob
         self.network = Lenet5._LeNet(self, self.x, color_channel, variable_mean, variable_stddev)
@@ -133,9 +140,9 @@ class Lenet5(object):
             total_loss += (loss * batch_x.shape[0])
         return total_loss / num_examples, total_acc / num_examples
 
-    def test_data(self, dataset, use_only_one_batch=True):
+    def test_data(self, dataset, use_only_one_batch=True, batch_size=100):
         if not use_only_one_batch:
-            test_batch_size = self.batch_size  # use train batch size
+            test_batch_size = batch_size
             steps_per_epoch = dataset.num_examples // test_batch_size
             num_examples = steps_per_epoch * test_batch_size
         else:

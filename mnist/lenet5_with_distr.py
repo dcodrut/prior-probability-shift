@@ -56,7 +56,10 @@ class Lenet5WithDistr(object):
         self.x = tf.placeholder(tf.float32, (None, mnist_dataset.image_size, mnist_dataset.image_size, color_channel))
         self.y = tf.placeholder(tf.float32, (None, self.label_size))
         self.train_distr = tf.Variable(initial_value=self.mnist_dataset.train.label_distr, name='train_distr')
+        self.test_distr = tf.Variable(initial_value=self.mnist_dataset.test.label_distr, name='test_distr')
         self.distr_pos = tf.Variable(initial_value=distr_pos, name='distr_pos')
+        self.train_num_examples = tf.Variable(initial_value=self.mnist_dataset.train.num_examples,
+                                              name='train_num_examples')
         self.y_distr = tf.placeholder(tf.float32, (self.label_size,), name='y_distr')  # the new input (label distr.)
         self.keep_prob = tf.placeholder(tf.float32)
         self.drop_out_keep_prob = drop_out_keep_prob
@@ -204,9 +207,9 @@ class Lenet5WithDistr(object):
             total_loss += (loss * batch_x.shape[0])
         return total_loss / num_examples, total_acc / num_examples
 
-    def test_data(self, dataset, use_only_one_batch=True, distr_to_attach=None):
+    def test_data(self, dataset, use_only_one_batch=True, distr_to_attach=None, batch_size=100):
         if not use_only_one_batch:
-            test_batch_size = self.batch_size  # use train batch size
+            test_batch_size = batch_size
             steps_per_epoch = dataset.num_examples // test_batch_size
             num_examples = steps_per_epoch * test_batch_size
         else:
