@@ -70,7 +70,15 @@ class Dataset(object):
         # Data was shuffled => must recompute indices per class
         self._indices_per_class = np.arange(self._num_classes) == np.argmax(self.labels, axis=1)[:, np.newaxis]
 
-    def next_batch(self, batch_size, weights=None):
+    def shuffle_only_a_class(self, c):
+        perm = np.arange(self._counts_per_class[c])
+        Dataset.rg.shuffle(perm)
+        self._images[self._indices_per_class[:, c]] = self._images[self._indices_per_class[:, c]][perm]
+        self._labels[self._indices_per_class[:, c]] = self._labels[self._indices_per_class[:, c]][perm]
+
+        # no need to recompute indices per class (data was shuffled only inside a class)
+
+    def next_batch(self, batch_size, weights=None, use_shuffling_inside_class=False):
         """
         Returns the next `batch_size` examples from this data set.
         If weights parameter is given, then the generated batch will respect that distribution (of labels).
@@ -78,6 +86,8 @@ class Dataset(object):
 
         :param batch_size: how many examples the batch will contain
         :param weights: importance of each label
+        :param use_shuffling_inside_class: if True, when all images from a class were running out, only those
+               are shuffled, not the entire dataset
         :return: batch of examples and their labels
         """
         if weights is None:
@@ -123,11 +133,20 @@ class Dataset(object):
                 self._epochs_completed += 1
 
                 # Shuffle the data
-                self.shuffle()
+                if not use_shuffling_inside_class:
+                    self.shuffle()
 
-                # Start next epoch
-                start_indices = np.zeros(self.num_classes, np.int32)
-                self._indices_in_epoch = num_examples_from_each_class
+                    # Start next epoch
+                    start_indices = np.zeros(self.num_classes, np.int32)
+                    self._indices_in_epoch = num_examples_from_each_class
+
+                else:
+                    # shuffle only the data corresponding to the classes that are finished
+                    for c in range(self.num_classes):
+                        if self._indices_in_epoch[c] > self._counts_per_class[c]:
+                            self.shuffle_only_a_class(c)
+                            start_indices[c] = 0
+                            self._indices_in_epoch[c] = num_examples_from_each_class[c]
 
                 # Check if there are enough images of each label to build a batch with given distribution
                 assert np.sum(num_examples_from_each_class > self._counts_per_class) == 0, \
