@@ -17,24 +17,25 @@ class Lenet5WithDistr(object):
         As input, along with the image, we add label distribution
     """
 
-    def __init__(self, mnist_dataset, model_name='no_name', show_plot_window=False,
+    def __init__(self, mnist_dataset, save_dir='results/', model_name='no_name', show_plot_window=False,
                  epochs=100, batch_size=500, variable_mean=0.,
                  variable_stddev=1., learning_rate=0.001, drop_out_keep_prob=0.5, verbose=True,
                  distr_pos=[False, False, False, False, False]):
 
         if distr_pos is None:
             distr_pos = [False, False, False, False, False]
+
         self.verbose = verbose
-        self.file_name = '{}/results/Lenet5_{}_{}.learning_curve.png'.format(os.getcwd(), model_name,
-                                                                             Utils.now_as_str())
-        self.file_name_model = '{}/results/Lenet5_{}_{}.model.ckpt'.format(os.getcwd(), model_name, Utils.now_as_str())
-        self.file_name_confusion_matrix = '{}/results/Lenet5_{}_{}.confusion_matrix.png'.format(os.getcwd(), model_name,
-                                                                                                Utils.now_as_str())
-        self.file_name_wrong_predicts = '{}/results/Lenet5_{}_{}.wrong_predicts.png'.format(os.getcwd(), model_name,
-                                                                                            Utils.now_as_str())
-        title = "{}_{}_epochs_{}_batch_size_{}_learning_rate_{}_keep_prob_{}_variable_stddev_{}".format(
-            self.__class__.__name__, model_name, epochs, batch_size, learning_rate, drop_out_keep_prob, variable_stddev)
-        self.plotter = TrainingPlotter(title, self.file_name, show_plot_window=show_plot_window)
+        save_dir_full_path = os.path.join(os.getcwd(), os.path.dirname(save_dir))
+        base_file_name = '{}/{}_{}_{}'.format(save_dir_full_path, self.__class__.__name__, model_name,
+                                              Utils.now_as_str())
+        self.file_name_learning_curve = '{}.learning_curve.png'.format(base_file_name)
+        self.file_name_model = '{}.model.ckpt'.format(base_file_name)
+        self.file_name_confusion_matrix = '{}.confusion_matrix.png'.format(base_file_name)
+        self.file_name_wrong_predicts = '{}.wrong_predicts.png'.format(base_file_name)
+
+        self.plotter = TrainingPlotter(title="{}_{}".format(self.__class__.__name__, model_name),
+                                       file_name=self.file_name_learning_curve, show_plot_window=show_plot_window)
 
         self.mnist_dataset = mnist_dataset
         self.epochs = epochs
@@ -103,7 +104,7 @@ class Lenet5WithDistr(object):
         c1_biases = tf.Variable(tf.zeros(conv_layer_1_depth))
         if distr_pos[0]:
             if self.verbose:
-                print('Attached distr. before C1 (at input)')
+                logging.debug('Attached distr. before C1 (at input)')
             temp = tf.concat([tf.zeros(x.shape[2] - distr_to_concat_fc.shape[1]), self.y_distr], axis=0)
             distr_to_concat_c = tf.reshape(tf.tile(input=temp, multiples=[tf.shape(x)[0]]),
                                            shape=[tf.shape(x)[0], 1, int(temp.shape[0]), 1])
@@ -121,7 +122,7 @@ class Lenet5WithDistr(object):
 
         if distr_pos[1]:
             if self.verbose:
-                print('Attached distr. before C2')
+                logging.debug('Attached distr. before C2')
             temp = tf.concat([tf.zeros(s1.shape[2] - distr_to_concat_fc.shape[1]), self.y_distr], axis=0)
             distr_to_concat_c = tf.reshape(tf.tile(input=temp, multiples=[tf.shape(s1)[0]]),
                                            shape=[tf.shape(s1)[0], 1, int(temp.shape[0])])
@@ -139,7 +140,7 @@ class Lenet5WithDistr(object):
 
         if distr_pos[2]:
             if self.verbose:
-                print('Attached distr. before F1')
+                logging.debug('Attached distr. before F1')
             s2 = tf.concat([s2, distr_to_concat_fc], axis=1)
 
         fc_layer_1_size = int(s2.shape[1])
@@ -151,7 +152,7 @@ class Lenet5WithDistr(object):
 
         if distr_pos[3]:
             if self.verbose:
-                print('Attached distr. before F2')
+                logging.debug('Attached distr. before F2')
             fc1 = tf.concat([fc1, distr_to_concat_fc], axis=1)
 
         fc_layer_2_size = int(fc1.shape[1])
@@ -163,7 +164,7 @@ class Lenet5WithDistr(object):
 
         if distr_pos[4]:
             if self.verbose:
-                print('Attached distr. before F3')
+                logging.debug('Attached distr. before F3')
             fc2 = tf.concat([fc2, distr_to_concat_fc], axis=1)
             fc_layer_3_size += distr_size
         output_weights = tf.Variable(
@@ -172,7 +173,7 @@ class Lenet5WithDistr(object):
         logits = tf.matmul(fc2, output_weights) + output_biases
 
         if self.verbose:
-            logging.debug('Network layers size:\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}'.format(
+            logging.info('Network layers size:\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}'.format(
                 x.get_shape().as_list(),
                 c1.get_shape().as_list(),
                 s1.get_shape().as_list(),
@@ -261,7 +262,7 @@ class Lenet5WithDistr(object):
         else:
             return loss, acc, predict.astype(np.int32), actual.astype(np.int32)
 
-    def train(self, distrs_list=None):
+    def train(self, distrs_list=None, use_shuffling_inside_class=False):
         # reset epoch_completed and indices_in_epoch fields from mnist dataset
         # (in case if the same object is used for multiple trainings)
         self.mnist_dataset.train.reset_epochs_completed()
@@ -294,7 +295,8 @@ class Lenet5WithDistr(object):
                     else:
                         distr_to_impose = distrs_list[k]
                         k = (k + 1) % len(distrs_list)
-                        batch_x, batch_y = self.mnist_dataset.train.next_batch(self.batch_size, distr_to_impose)
+                        batch_x, batch_y = self.mnist_dataset.train.next_batch(self.batch_size, distr_to_impose,
+                                                                               use_shuffling_inside_class)
                         # print('Step = {} --- Distr to impose: {}'.format(step, distr_to_impose))
 
                     batch_y_distr = np.bincount(np.argmax(batch_y, axis=1),
@@ -319,8 +321,9 @@ class Lenet5WithDistr(object):
                 total_tran_acc = total_tran_acc / concrete_num_examples_used_in_last_epoch
                 val_loss, val_acc = self.eval_data(self.mnist_dataset.validation)
                 logging.info(
-                    "EPOCH {} --- Training: loss = {:.3f}, acc = {:.3f}; Validation: loss = {:.3f}, acc = {:.3f}; num_examples_used = {}"
-                        .format(i + 1, total_tran_loss, total_tran_acc, val_loss, val_acc,
+                    "Epoch {:2d}/{:2d} --- Training: loss = {:.3f}, acc = {:.3f}; Validation: loss = {:.3f},"
+                    " acc = {:.3f}; num_examples_used = {}"
+                        .format(i + 1, self.epochs, total_tran_loss, total_tran_acc, val_loss, val_acc,
                                 concrete_num_examples_used_in_last_epoch))
                 self.plotter.add_loss_accuracy_to_plot(i, total_tran_loss, total_tran_acc, val_loss, val_acc,
                                                        redraw=True)
@@ -342,7 +345,7 @@ class Lenet5WithDistr(object):
                 wrong_predict_images_sorted = [image for image in wrong_predict_images_sorted]
                 self.plotter.combine_images(wrong_predict_images_sorted, self.file_name_wrong_predicts)
             except Exception as ex:
-                print("Failed when plotting wrong predicted images:\n" + str(ex))
+                logging.error("Failed when plotting wrong predicted images:\n" + str(ex))
         self.plotter.safe_shut_down()
 
     def predict_images(self, images):
@@ -360,7 +363,7 @@ class Lenet5WithDistr(object):
 
         # check if directory  ckpt_dir exists
         if not os.path.exists(dir):
-            print('Directory {} not found.'.format(ckpt_dir))
+            logging.error('Directory {} not found.'.format(ckpt_dir))
         else:
             # train_distr was introduced later so we will try to restore as much we can from the checkpoint file
             reader = tf.train.NewCheckpointReader(os.path.join(dir, ckpt_filename))
