@@ -64,8 +64,8 @@ class Dataset(object):
     def shuffle(self):
         perm = np.arange(self._num_examples)
         Dataset.rg.shuffle(perm)
-        self._images = self._images[perm,]
-        self._labels = self._labels[perm,]
+        self._images = self._images[perm]
+        self._labels = self._labels[perm]
 
         # Data was shuffled => must recompute indices per class
         self._indices_per_class = np.arange(self._num_classes) == np.argmax(self.labels, axis=1)[:, np.newaxis]
@@ -165,8 +165,8 @@ class Dataset(object):
             # indices_wrt_distr = None
             for i in range(self.num_classes):
                 if num_examples_from_each_class[i] > 0:
-                    images_of_class_i = self._images[self._indices_per_class[:, i],]
-                    labels_of_class_i = self._labels[self._indices_per_class[:, i],]
+                    images_of_class_i = self._images[self._indices_per_class[:, i]]
+                    labels_of_class_i = self._labels[self._indices_per_class[:, i]]
                     # indices_of_class_i = np.where(self._indices_per_class[:, i] == True)[0]
                     end_index_in_batch = start_index_in_batch + num_examples_from_each_class[i]
                     batch_x[start_index_in_batch:end_index_in_batch, ] = \
@@ -183,8 +183,8 @@ class Dataset(object):
             perm = np.arange(batch_size)
             # Dataset.reset_rg()
             Dataset.rg.shuffle(perm)
-            batch_x = batch_x[perm,]
-            batch_y = batch_y[perm,]
+            batch_x = batch_x[perm]
+            batch_y = batch_y[perm]
             # indices_wrt_distr = indices_wrt_distr[perm]
 
         return batch_x, batch_y
@@ -217,9 +217,6 @@ class MNISTDataset(object):
         self._train = Dataset(train_images, train_labels, MNISTDataset.num_classes)
         self._validation = Dataset(validation_images, validation_labels, MNISTDataset.num_classes)
         self._test = Dataset(test_images, test_labels, MNISTDataset.num_classes)
-
-        # save a screenshot of current dataset (maybe used in impose_distribution method)
-        self.backup()
 
         # reset Dataset's random generator
         Dataset.reset_rg()
@@ -314,7 +311,6 @@ class MNISTDataset(object):
             max_weight = global_max_weight
 
         # restore original dataset and reset start indices in order to start building the subset from the beginning
-        self.restore_from_backup()
         self.train.reset_indices_in_epoch()
         self.validation.reset_indices_in_epoch()
         self.test.reset_indices_in_epoch()
@@ -347,9 +343,13 @@ class MNISTDataset(object):
     def impose_distr_on_train_dataset(self, subset_size, weights):
         train_subset_x, train_subset_y = self.train.next_batch(batch_size=subset_size, weights=weights)
         self._train = Dataset(train_subset_x, train_subset_y, MNISTDataset.num_classes)
-        self.backup()  # in order to overwrite the entire dataset
 
     def oversampling_train_dataset_wrt_distr(self, weights):
+        """
+            Oversampling the training set in order to finally satisfy the distribution represented by weights parameter
+        :param weights: target distribution
+        """
+
         current_train_distr = self._train.label_distr
         target_train_distr = weights
         current_train_distr[current_train_distr == 0] = 1  # for preventing devide by zero
@@ -374,14 +374,30 @@ class MNISTDataset(object):
             new_indices[pos:pos + target_counts[i_class]] = new_class_i_indices
             pos += target_counts[i_class]
         self._train = Dataset(self.train.images[new_indices], self.train.labels[new_indices], MNISTDataset.num_classes)
-        self.backup()  # in order to overwrite the entire dataset
 
-    def backup(self):
-        self._train_backup = self._train
-        self._validation_backup = self._validation
-        self._test_backup = self._test
+    def oversampling_train_dataset_wrt_counts(self, target_counts):
+        """
+            Oversampling the training set in order to finally have more that counts images in the training set. I.e.,
+            for every class i, self.train.counts_per_class[i] >= counts[i]
+        :param target_counts: the thresholds need to be passed by oversampling
+        """
 
-    def restore_from_backup(self):
-        self._train = self._train_backup
-        self._validation = self._validation_backup
-        self._test = self._test_backup
+        new_indices = np.empty(np.sum(target_counts), dtype=np.int32)
+        pos = 0
+        for i_class in range(self.num_classes):
+            current_count_i_class = self.train.counts_per_class[i_class]
+            if current_count_i_class == 0:
+                continue
+            new_class_i_indices = np.empty(target_counts[i_class], dtype=np.int32)
+            indices_of_class_i = np.where(self.train._indices_per_class[:, i_class])[0]
+            k = 0
+            while k < target_counts[i_class]:
+                if target_counts[i_class] > (k + current_count_i_class):
+                    count_to_add = current_count_i_class
+                else:
+                    count_to_add = target_counts[i_class] - k
+                new_class_i_indices[k:k + count_to_add] = indices_of_class_i[0:count_to_add]
+                k += count_to_add
+            new_indices[pos:pos + target_counts[i_class]] = new_class_i_indices
+            pos += target_counts[i_class]
+        self._train = Dataset(self.train.images[new_indices], self.train.labels[new_indices], MNISTDataset.num_classes)
