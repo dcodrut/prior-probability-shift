@@ -1,3 +1,5 @@
+import pickle
+
 from sklearn.model_selection import train_test_split
 
 from enhance_data import *
@@ -16,7 +18,7 @@ class Dataset(object):
         self._epochs_completed = 0
         self._num_classes = num_classes
 
-        # the following variables are used to generate a batch w.r.t. a given label distribution
+        # the following variables are used to generate a batch (simple or w.r.t. a given label distribution)
         self._index_in_epoch = 0
         self._indices_in_epoch = np.zeros(num_classes, np.int32)
         self._indices_per_class = np.arange(num_classes) == np.argmax(labels, axis=1)[:, np.newaxis]
@@ -50,6 +52,10 @@ class Dataset(object):
     @property
     def label_distr(self):
         return self._label_distr
+
+    @property
+    def indices_per_class(self):
+        return self._indices_per_class
 
     def reset_indices_in_epoch(self):
         self._indices_in_epoch = np.zeros(self.num_classes, np.int32)
@@ -189,6 +195,81 @@ class Dataset(object):
 
         return batch_x, batch_y
 
+    def reset_util_fields(self):
+        self._epochs_completed = 0
+        self._index_in_epoch = 0
+        self._indices_in_epoch = np.zeros(self.num_classes, np.int32)
+        self._indices_per_class = np.arange(self.num_classes) == np.argmax(self.labels, axis=1)[:, np.newaxis]
+        self._counts_per_class = np.sum(self._indices_per_class, axis=0)
+        self._label_distr = self._counts_per_class / np.sum(self._counts_per_class)
+
+    def impose_distribution(self, num_examples, weights):
+        train_subset_x, train_subset_y = self.next_batch(batch_size=num_examples, weights=weights)
+
+        # overwrite current images and labels and their number
+        self._num_examples = train_subset_x.shape[0]
+        self._images = train_subset_x
+        self._labels = train_subset_y
+
+        # reset all the others field
+        self.reset_util_fields()
+
+    def oversampling_wrt_distribution(self, weights):
+        """
+            Oversampling the set in order to finally satisfy the distribution represented by weights parameter.
+        :param weights: target distribution
+        """
+
+        current_distr = self.label_distr
+        target_distr = weights
+        current_distr[current_distr == 0] = 1  # for preventing divide by zero
+        ratio = (target_distr / current_distr) / np.min((target_distr / current_distr))
+        target_counts = np.floor(self.counts_per_class * ratio).astype(np.int32)
+
+        self._oversampling_until_counts(target_counts)
+
+    def oversampling_until_exceed_min_count(self, target_min_count):
+        """
+            Oversampling the dataset in order to finally have more that min_count images in every class.
+            Keep the same label distribution.
+        :param target_min_count: the threshold need to be exceeded by oversampling
+        """
+
+        # exclude the labels which counts are 0, for preventing divide by 0
+        current_min_count = np.min(self.counts_per_class[self.counts_per_class > 0])
+        ratio = target_min_count / current_min_count
+        target_counts = np.floor(self.counts_per_class * ratio).astype(np.int32)
+
+        self._oversampling_until_counts(target_counts)
+
+    def _oversampling_until_counts(self, target_counts):
+        new_indices = np.empty(np.sum(target_counts), dtype=np.int32)
+        pos = 0
+        for i_class in range(self.num_classes):
+            current_count_i_class = self.counts_per_class[i_class]
+            if current_count_i_class == 0:
+                continue
+            new_class_i_indices = np.empty(target_counts[i_class], dtype=np.int32)
+            indices_of_class_i = np.where(self.indices_per_class[:, i_class])[0]
+            k = 0
+            while k < target_counts[i_class]:
+                if target_counts[i_class] > (k + current_count_i_class):
+                    count_to_add = current_count_i_class
+                else:
+                    count_to_add = target_counts[i_class] - k
+                new_class_i_indices[k:k + count_to_add] = indices_of_class_i[0:count_to_add]
+                k += count_to_add
+            new_indices[pos:pos + target_counts[i_class]] = new_class_i_indices
+            pos += target_counts[i_class]
+
+        # overwrite current images and labels and their number
+        self._images = self.images[new_indices]
+        self._labels = self.labels[new_indices]
+        self._num_examples = self._images.shape[0]
+
+        # reset all the others field
+        self.reset_util_fields()
+
 
 class MNISTDataset(object):
     image_size = 28
@@ -321,19 +402,20 @@ class MNISTDataset(object):
 
         if max_training_size is not None and train_num_examples > max_training_size:
             train_num_examples = max_training_size
-        train_subset_x, train_subset_y = self.train.next_batch(batch_size=train_num_examples, weights=weights)
+        self.train.impose_distribution(num_examples=train_num_examples, weights=weights)
 
         validation_num_examples = np.floor(np.min(self.validation.counts_per_class) / max_weight).astype(np.int32)
         # round to hundreds
         validation_num_examples -= validation_num_examples % 100
-        validation_subset_x, validation_subset_y = self.validation.next_batch(batch_size=validation_num_examples,
-                                                                              weights=weights)
+        self.validation.impose_distribution(num_examples=validation_num_examples, weights=weights)
 
         test_num_examples = np.floor(np.min(self.test.counts_per_class) / max_weight).astype(np.int32)
         # round to hundreds
         test_num_examples -= test_num_examples % 100
         if max_test_size is not None and test_num_examples > max_test_size:
             test_num_examples = max_test_size
+        self.test.impose_distribution(num_examples=test_num_examples, weights=weights)
+
 
         test_subset_x, test_subset_y = self.test.next_batch(batch_size=test_num_examples, weights=weights)
         self._train = Dataset(train_subset_x, train_subset_y, MNISTDataset.num_classes)
