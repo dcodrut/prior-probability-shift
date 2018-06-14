@@ -312,4 +312,9 @@ class Utils(object):
                 else:
                     indices_wrt_distr = np.append(indices_wrt_distr, random_indices_to_append)
 
+        # shuffle indices_wrt_distr because they are ordered by label
+        perm = np.arange(no_examples)
+        Dataset.rg.shuffle(perm)
+        indices_wrt_distr = indices_wrt_distr[perm]
+
         return indices_wrt_distr
