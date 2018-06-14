@@ -185,6 +185,76 @@ class Lenet5WithDistr(object):
 
         return logits
 
+    def _mlp(self, x, no_color_channels, variable_mean, variable_stddev, distr_pos):
+        """
+        Implementation of simple MLP architecture, with the possibility of attaching batch distribution
+        :param x: input images
+        :param no_color_channels:
+        :param variable_mean:
+        :param variable_stddev:
+        :return: the result of the last fully connected layer
+        """
+        # Hyperparameters
+        distr_size = self.mnist_dataset.num_classes
+        layer_1_size = self.mnist_dataset.image_size * self.mnist_dataset.image_size * no_color_channels
+        layer_2_size = 128
+        layer_3_size = 64
+        output_layer_size = self.label_size
+        mu = variable_mean
+        sigma = variable_stddev
+
+        # tile y_distr in order to attach it as input for network's layers
+        distr_to_concat_fc = tf.reshape(tf.tile(input=self.y_distr, multiples=[tf.shape(x)[0]]),
+                                        shape=[tf.shape(x)[0], distr_size])
+        self.batch_distr = distr_to_concat_fc
+
+        # implement network architecture
+        flatten_input = flatten(x)
+
+        if distr_pos[2]:
+            if self.verbose:
+                logging.debug('Attached distr. before F1')
+            flatten_input = tf.concat([flatten_input, distr_to_concat_fc], axis=1)
+
+        layer_1_size = int(flatten_input.shape[1])
+        fc1_weights = tf.Variable(tf.truncated_normal(shape=(layer_1_size, layer_2_size), mean=mu, stddev=sigma))
+        fc1_biases = tf.Variable(tf.zeros(layer_2_size))
+        fc1 = tf.matmul(flatten_input, fc1_weights) + fc1_biases
+        fc1 = tf.nn.relu(fc1)
+        fc1 = tf.nn.dropout(fc1, self.keep_prob, seed=self.mnist_dataset.train.seed)
+
+        if distr_pos[3]:
+            if self.verbose:
+                logging.debug('Attached distr. before F2')
+            fc1 = tf.concat([fc1, distr_to_concat_fc], axis=1)
+
+        layer_2_size = int(fc1.shape[1])
+        fc2_weights = tf.Variable(tf.truncated_normal(shape=(layer_2_size, layer_3_size), mean=mu, stddev=sigma))
+        fc2_biases = tf.Variable(tf.zeros(layer_3_size))
+        fc2 = tf.matmul(fc1, fc2_weights) + fc2_biases
+        fc2 = tf.nn.relu(fc2)
+        fc2 = tf.nn.dropout(fc2, self.keep_prob, seed=self.mnist_dataset.train.seed)
+
+        if distr_pos[4]:
+            if self.verbose:
+                logging.debug('Attached distr. before F3')
+            fc2 = tf.concat([fc2, distr_to_concat_fc], axis=1)
+            layer_3_size += distr_size
+        output_weights = tf.Variable(
+            tf.truncated_normal(shape=(layer_3_size, output_layer_size), mean=mu, stddev=sigma))
+        output_biases = tf.Variable(tf.zeros(output_layer_size))
+        logits = tf.matmul(fc2, output_weights) + output_biases
+
+        if self.verbose:
+            logging.info('Network layers size:\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}'.format(
+                x.get_shape().as_list(),
+                flatten_input.get_shape().as_list(),
+                fc1.get_shape().as_list(),
+                fc2.get_shape().as_list(),
+                logits.get_shape().as_list()))
+
+        return logits
+
     def eval_data(self, dataset, use_only_one_batch=True):
         if not use_only_one_batch:
             validation_batch_size = self.batch_size  # use train batch size
