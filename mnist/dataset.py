@@ -426,69 +426,129 @@ class MNISTDataset(object):
         self.test.impose_distribution(num_examples=test_num_examples, weights=weights)
 
 
-        test_subset_x, test_subset_y = self.test.next_batch(batch_size=test_num_examples, weights=weights)
-        self._train = Dataset(train_subset_x, train_subset_y, MNISTDataset.num_classes)
-        self._validation = Dataset(validation_subset_x, validation_subset_y, MNISTDataset.num_classes)
-        self._test = Dataset(test_subset_x, test_subset_y, MNISTDataset.num_classes)
+class CIFAR10Dataset:
+    image_size = 32
+    num_channels = 3  # RGB
+    num_classes = 10
 
-    def impose_distr_on_train_dataset(self, subset_size, weights):
-        train_subset_x, train_subset_y = self.train.next_batch(batch_size=subset_size, weights=weights)
-        self._train = Dataset(train_subset_x, train_subset_y, MNISTDataset.num_classes)
+    train_validation_size = 50000
+    train_size = 45000  # number of images and labels for train dataset
+    validation_size = 5000  # number of images and labels for validation dataset
+    test_size = 10000  # number of images and labels for test dataset
 
-    def oversampling_train_dataset_wrt_distr(self, weights):
+    def __init__(self, data_dir):
+
+        train_validation_images = None
+        train_validation_labels = None
+
+        for i in range(1, 6):
+            data_dic = CIFAR10Dataset.unpickle("{}/data_batch_{}".format(data_dir, i))
+            if i == 1:
+                train_validation_images = data_dic['data']
+                train_validation_labels = data_dic['labels']
+            else:
+                train_validation_images = np.vstack((train_validation_images, data_dic['data']))
+                train_validation_labels = np.append(train_validation_labels, data_dic['labels'])
+
+        train_validation_images = train_validation_images.reshape((CIFAR10Dataset.train_validation_size, 3, 32, 32))
+        train_validation_images = np.rollaxis(train_validation_images, axis=1, start=4)  # in order to get 32 x 32 x 3
+        train_validation_images = train_validation_images / 255.0
+
+        test_data_dic = CIFAR10Dataset.unpickle("{}/test_batch".format(data_dir))
+        test_images = np.array(test_data_dic['data']).reshape((CIFAR10Dataset.test_size, 3, 32, 32))
+        test_images = test_images / 255.0
+        test_images = np.rollaxis(test_images, axis=1, start=4)
+        test_labels = np.array(test_data_dic['labels'])
+
+        train_images, validation_images, train_labels, validation_labels = train_test_split(train_validation_images,
+                                                                                            train_validation_labels,
+                                                                                            test_size=CIFAR10Dataset.validation_size,
+                                                                                            random_state=42)
+
+        # convert labels into one-hot vectors
+        train_labels = Utils.dense_to_one_hot(train_labels, MNISTDataset.num_classes)
+        validation_labels = Utils.dense_to_one_hot(validation_labels, MNISTDataset.num_classes)
+        test_labels = Utils.dense_to_one_hot(test_labels, MNISTDataset.num_classes)
+
+        self._train = Dataset(train_images, train_labels, MNISTDataset.num_classes)
+        self._validation = Dataset(validation_images, validation_labels, MNISTDataset.num_classes)
+        self._test = Dataset(test_images, test_labels, MNISTDataset.num_classes)
+
+        # reset Dataset's random generator
+        Dataset.reset_rg()
+
+    @staticmethod
+    def unpickle(file):
+        with open(file, 'rb') as fo:
+            return pickle.load(fo, encoding='latin-1')
+
+    @property
+    def train(self):
+        return self._train
+
+    @property
+    def validation(self):
+        return self._validation
+
+    @property
+    def test(self):
+        return self._test
+
+    def impose_distribution(self, weights, global_max_weight=None, max_training_size=None, max_test_size=None):
         """
-            Oversampling the training set in order to finally satisfy the distribution represented by weights parameter
-        :param weights: target distribution
+        Overwrites current CIFAR dataset with a subset w.r.t. a given distribution
+
+        :param weights: label distribution
+        :param global_max_weight: - if multiple distributions will be considered in training, than we might need the
+                                global maximum weight value in order to build subsets of the same size for
+                                all distributions considered
+
+                                 - if it's None, than global_max_weight will be local maximum (i.e. the maximum value
+                                 of the current weights considered)
+         :param max_training_size: if is not None, the train subset will contain max_training_size samples (if possible)
+         :param max_test_size: if is not None, the test subset will contain max_test_size samples (if possible)
+
         """
 
-        current_train_distr = self._train.label_distr
-        target_train_distr = weights
-        current_train_distr[current_train_distr == 0] = 1  # for preventing devide by zero
-        ratio = (target_train_distr / current_train_distr) / np.min((target_train_distr / current_train_distr))
-        target_counts = np.floor(self._train.counts_per_class * ratio).astype(np.int32)
-        new_indices = np.empty(np.sum(target_counts), dtype=np.int32)
-        pos = 0
-        for i_class in range(self.num_classes):
-            current_count_i_class = self.train.counts_per_class[i_class]
-            if current_count_i_class == 0:
-                continue
-            new_class_i_indices = np.empty(target_counts[i_class], dtype=np.int32)
-            indices_of_class_i = np.where(self.train._indices_per_class[:, i_class])[0]
-            k = 0
-            while k < target_counts[i_class]:
-                if target_counts[i_class] > (k + current_count_i_class):
-                    count_to_add = current_count_i_class
-                else:
-                    count_to_add = target_counts[i_class] - k
-                new_class_i_indices[k:k + count_to_add] = indices_of_class_i[0:count_to_add]
-                k += count_to_add
-            new_indices[pos:pos + target_counts[i_class]] = new_class_i_indices
-            pos += target_counts[i_class]
-        self._train = Dataset(self.train.images[new_indices], self.train.labels[new_indices], MNISTDataset.num_classes)
+        if global_max_weight is None:
+            max_weight = np.max(weights)
+        else:
+            max_weight = global_max_weight
 
-    def oversampling_train_dataset_wrt_counts(self, target_counts):
-        """
-            Oversampling the training set in order to finally have more that counts images in the training set. I.e.,
-            for every class i, self.train.counts_per_class[i] >= counts[i]
-        :param target_counts: the thresholds need to be passed by oversampling
-        """
+        # restore original dataset and reset start indices in order to start building the subset from the beginning
+        self.train.reset_indices_in_epoch()
+        self.validation.reset_indices_in_epoch()
+        self.test.reset_indices_in_epoch()
 
-        new_indices = np.empty(np.sum(target_counts), dtype=np.int32)
-        pos = 0
-        for i_class in range(self.num_classes):
-            current_count_i_class = self.train.counts_per_class[i_class]
-            if current_count_i_class == 0:
-                continue
-            new_class_i_indices = np.empty(target_counts[i_class], dtype=np.int32)
-            indices_of_class_i = np.where(self.train._indices_per_class[:, i_class])[0]
-            k = 0
-            while k < target_counts[i_class]:
-                if target_counts[i_class] > (k + current_count_i_class):
-                    count_to_add = current_count_i_class
-                else:
-                    count_to_add = target_counts[i_class] - k
-                new_class_i_indices[k:k + count_to_add] = indices_of_class_i[0:count_to_add]
-                k += count_to_add
-            new_indices[pos:pos + target_counts[i_class]] = new_class_i_indices
-            pos += target_counts[i_class]
-        self._train = Dataset(self.train.images[new_indices], self.train.labels[new_indices], MNISTDataset.num_classes)
+        train_num_examples = np.floor(np.min(self.train.counts_per_class) / max_weight).astype(np.int32)
+        # round to hundreds
+        train_num_examples -= train_num_examples % 100
+
+        if max_training_size is not None and train_num_examples > max_training_size:
+            train_num_examples = max_training_size
+        self.train.impose_distribution(num_examples=train_num_examples, weights=weights)
+
+        validation_num_examples = np.floor(np.min(self.validation.counts_per_class) / max_weight).astype(np.int32)
+        # round to hundreds
+        validation_num_examples -= validation_num_examples % 100
+        self.validation.impose_distribution(num_examples=validation_num_examples, weights=weights)
+
+        test_num_examples = np.floor(np.min(self.test.counts_per_class) / max_weight).astype(np.int32)
+        # round to hundreds
+        test_num_examples -= test_num_examples % 100
+        if max_test_size is not None and test_num_examples > max_test_size:
+            test_num_examples = max_test_size
+        self.test.impose_distribution(num_examples=test_num_examples, weights=weights)
+
+    @property
+    def summary(self):
+        return """
+        training data set: images = {}, labels = {}, distr = {}
+        validation data set: images = {}, labels = {}, distr = {}
+        testing data set: images = {}, labels = {}, distr = {}
+        """.format(self._train.images.shape, self._train.labels.shape,
+                   np.round(self._train.label_distr, decimals=3),
+                   self._validation.images.shape, self._validation.labels.shape,
+                   np.round(self._validation.label_distr, decimals=3),
+                   self._test.images.shape, self._test.labels.shape,
+                   np.round(self._test.label_distr, decimals=3))
