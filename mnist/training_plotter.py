@@ -1,8 +1,10 @@
-import numpy as np
-import matplotlib.pyplot as plt
-from laplotter import LossAccPlotter
-from PIL import Image
 import math
+
+import matplotlib.pyplot as plt
+import numpy as np
+from PIL import Image
+
+from laplotter import LossAccPlotter
 
 
 class TrainingPlotter(object):
@@ -76,14 +78,20 @@ class TrainingPlotter(object):
         max_images_pre_row = 25
         width = max_images_pre_row * image_size
         height = math.ceil(count / max_images_pre_row) * image_size
-        # blank_image = Image.new("RGB", (width, height))
-        blank_image = Image.new("L", (width, height))
+        channels = images[0].shape[2]
+        if channels == 3:
+            blank_image = Image.new("RGB", (width, height))
+        else:
+            blank_image = Image.new("L", (width, height))
 
         for index in range(count):
             # each image was scale to [0,1] => we need to do the inverse operation
             image = np.array(images[index])
-            image = image[0:image_size,0:image_size, 0]
-            image = (image*256).astype(np.uint8)
+            if channels == 3:
+                image = image[0:image_size, 0:image_size, :]
+            else:
+                image = image[0:image_size, 0:image_size, 0]
+            image = (image * 256).astype(np.uint8)
             image = Image.fromarray(image)
             column = index % max_images_pre_row
             row = index // max_images_pre_row
