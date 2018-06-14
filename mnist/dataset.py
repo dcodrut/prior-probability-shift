@@ -270,6 +270,40 @@ class Dataset(object):
         # reset all the others field
         self.reset_util_fields()
 
+    def enhance_with_random_rotate(self, ratio=1):
+        enh_train_images, enh_train_labels = enhance_with_random_rotate(self.images, np.argmax(self.labels, axis=1),
+                                                                        ratio)
+        # overwrite current images and labels and their number
+        self._images = enh_train_images
+        self._labels = Utils.dense_to_one_hot(enh_train_labels, MNISTDataset.num_classes)
+        self._num_examples = self._images.shape[0]
+
+        # reset all the others field
+        self.reset_util_fields()
+
+    def enhance_with_random_zoomin(self, ratio=1):
+        enh_train_images, enh_train_labels = enhance_with_random_zoomin(self.images, np.argmax(self.labels, axis=1),
+                                                                        ratio)
+        # overwrite current images and labels and their number
+        self._images = enh_train_images
+        self._labels = Utils.dense_to_one_hot(enh_train_labels, MNISTDataset.num_classes)
+        self._num_examples = self._images.shape[0]
+
+        # reset all the others field
+        self.reset_util_fields()
+
+    def enhance_with_random_zoomin_and_rotate(self, ratio=1):
+        enh_train_images, enh_train_labels = enhance_with_random_zoomin_and_rotate(self.images,
+                                                                                   np.argmax(self.labels, axis=1),
+                                                                                   ratio)
+        # overwrite current images and labels and their number
+        self._images = enh_train_images
+        self._labels = Utils.dense_to_one_hot(enh_train_labels, MNISTDataset.num_classes)
+        self._num_examples = self._images.shape[0]
+
+        # reset all the others field
+        self.reset_util_fields()
+
 
 class MNISTDataset(object):
     image_size = 28
@@ -332,30 +366,6 @@ class MNISTDataset(object):
     def test(self):
         return self._test
 
-    def enhance_with_random_rotate(self, ratio=1):
-        enh_train_images, enh_train_labels = enhance_with_random_rotate(self.train.images,
-                                                                        np.argmax(self.train.labels, axis=1),
-                                                                        ratio)
-        # reformat labels into one-hot vectors
-        enh_train_labels = Utils.dense_to_one_hot(enh_train_labels, MNISTDataset.num_classes)
-        self._train = Dataset(enh_train_images, enh_train_labels, MNISTDataset.num_classes)
-
-    def enhance_with_random_zoomin(self, ratio=1):
-        enh_train_images, enh_train_labels = enhance_with_random_zoomin(self.train.images,
-                                                                        np.argmax(self.train.labels, axis=1),
-                                                                        ratio)
-        # reformat labels into one-hot vectors
-        enh_train_labels = Utils.dense_to_one_hot(enh_train_labels, MNISTDataset.num_classes)
-        self._train = Dataset(enh_train_images, enh_train_labels, MNISTDataset.num_classes)
-
-    def enhance_with_random_zoomin_and_rotate(self, ratio=1):
-        enh_train_images, enh_train_labels = enhance_with_random_zoomin_and_rotate(self.train.images,
-                                                                                   np.argmax(self.train.labels, axis=1),
-                                                                                   ratio)
-        # reformat labels into one-hot vectors
-        enh_train_labels = Utils.dense_to_one_hot(enh_train_labels, MNISTDataset.num_classes)
-        self._train = Dataset(enh_train_images, enh_train_labels, MNISTDataset.num_classes)
-
     @property
     def summary(self):
         return """
@@ -377,8 +387,7 @@ class MNISTDataset(object):
         :param weights: label distribution
         :param global_max_weight: - if multiple distributions will be considered in training, than we might need the
                                 global maximum weight value in order to build subsets of the same size for
-                                all distributions considered, so we need to take it into account when building the
-                                subset
+                                all distributions considered;
                                  - if it's None, than global_max_weight will be local maximum (i.e. the maximum value
                                  of the current weights considered)
          :param max_training_size: if is not None, the train subset will contain max_training_size samples (if possible)
