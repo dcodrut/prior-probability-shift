@@ -101,12 +101,14 @@ class Lenet5(object):
         # s4 = tf.nn.dropout(s4, self.keep_prob, seed=self.mnist_dataset.train.seed)
         s4_flatten = flatten(s4)
 
+        fc_layer_1_size = int(s4_flatten.shape[1])
         f5_weights = tf.Variable(tf.truncated_normal(shape=(fc_layer_1_size, fc_layer_2_size), mean=mu, stddev=sigma))
         f5_biases = tf.Variable(tf.zeros(fc_layer_2_size))
         f5 = tf.matmul(s4_flatten, f5_weights) + f5_biases
         f5 = tf.nn.relu(f5)
         f5 = tf.nn.dropout(f5, self.keep_prob, seed=self.mnist_dataset.train.seed)
 
+        fc_layer_2_size = int(f5.shape[1])
         f6_weights = tf.Variable(tf.truncated_normal(shape=(fc_layer_2_size, fc_layer_3_size), mean=mu, stddev=sigma))
         f6_biases = tf.Variable(tf.zeros(fc_layer_3_size))
         f6 = tf.matmul(f5, f6_weights) + f6_biases
