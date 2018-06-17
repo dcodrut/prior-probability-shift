@@ -305,8 +305,9 @@ class Utils(object):
                 indices_of_class_i = np.where(indices_per_class[:, i] == True)[0]
                 # print(indices_of_class_i[0:num_examples_from_each_class[i]])
                 # print(np.sum(indices_of_class_i[0:num_examples_from_each_class[i]]))
-                random_indices_to_append = indices_of_class_i[
-                    Dataset.rg.randint(0, counts_per_class[i], num_examples_from_each_class[i])]
+                perm = np.arange(0, counts_per_class[i])
+                Dataset.rg.shuffle(perm)
+                random_indices_to_append = indices_of_class_i[perm[:num_examples_from_each_class[i]]]
                 if indices_wrt_distr is None:
                     indices_wrt_distr = random_indices_to_append
                 else:
