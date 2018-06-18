@@ -31,7 +31,8 @@ def enhance_with_function(images, labels, ratio, enhance_func):
 
     # One Class
     for i in range(len(inputs_per_class)):
-        input_ratio = math.ceil((max_inputs * ratio + 1 - inputs_per_class[i]) / inputs_per_class[i])
+        # input_ratio = math.ceil((max_inputs * ratio + 1 - inputs_per_class[i]) / inputs_per_class[i])
+        input_ratio = ratio
         print("generating class:{} with ratio:{}, max input:{}, current:{}".format(
             i, input_ratio, max_inputs, inputs_per_class[i]))
 
@@ -79,7 +80,7 @@ def _zoomin_image_randomly(image):
     scale = np.random.choice(_IMAGE_CUT_RATIOS)
     lx, ly, _ = image.shape
     first_run = image[int(lx * scale): - int(lx * scale), int(ly * scale): - int(ly * scale), :]
-    return skimage.transform.resize(first_run, (28, 28))
+    return skimage.transform.resize(first_run, (lx, ly), mode='constant')
 
 
 def _enhance_one_image_with_random_funcs(enhance_funcs):
