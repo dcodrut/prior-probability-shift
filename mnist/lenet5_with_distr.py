@@ -6,7 +6,7 @@ import tensorflow as tf
 from tensorflow.contrib.layers import flatten
 
 from training_plotter import TrainingPlotter
-from utils import Utils
+import utils
 
 logging.config.fileConfig('logging.conf')
 
@@ -28,7 +28,7 @@ class Lenet5WithDistr(object):
         self.verbose = verbose
         save_dir_full_path = os.path.join(os.getcwd(), os.path.dirname(save_dir))
         base_file_name = '{}/{}_{}_{}'.format(save_dir_full_path, self.__class__.__name__, model_name,
-                                              Utils.now_as_str())
+                                              utils.now_as_str())
         self.file_name_learning_curve = '{}.learning_curve.png'.format(base_file_name)
         self.file_name_model = '{}.model.ckpt'.format(base_file_name)
         self.file_name_confusion_matrix = '{}.confusion_matrix.png'.format(base_file_name)

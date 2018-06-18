@@ -3,7 +3,7 @@ import pickle
 from sklearn.model_selection import train_test_split
 
 from enhance_data import *
-from utils import Utils
+import utils
 
 
 class Dataset(object):
@@ -275,7 +275,7 @@ class Dataset(object):
                                                                         ratio)
         # overwrite current images and labels and their number
         self._images = enh_train_images
-        self._labels = Utils.dense_to_one_hot(enh_train_labels, MNISTDataset.num_classes)
+        self._labels = utils.dense_to_one_hot(enh_train_labels, MNISTDataset.num_classes)
         self._num_examples = self._images.shape[0]
 
         # reset all the others field
@@ -286,7 +286,7 @@ class Dataset(object):
                                                                         ratio)
         # overwrite current images and labels and their number
         self._images = enh_train_images
-        self._labels = Utils.dense_to_one_hot(enh_train_labels, MNISTDataset.num_classes)
+        self._labels = utils.dense_to_one_hot(enh_train_labels, MNISTDataset.num_classes)
         self._num_examples = self._images.shape[0]
 
         # reset all the others field
@@ -298,7 +298,7 @@ class Dataset(object):
                                                                                    ratio)
         # overwrite current images and labels and their number
         self._images = enh_train_images
-        self._labels = Utils.dense_to_one_hot(enh_train_labels, MNISTDataset.num_classes)
+        self._labels = utils.dense_to_one_hot(enh_train_labels, MNISTDataset.num_classes)
         self._num_examples = self._images.shape[0]
 
         # reset all the others field
@@ -325,9 +325,9 @@ class MNISTDataset(object):
                              test_size=validation_size, random_state=42)
 
         # convert labels into one-hot vectors
-        train_labels = Utils.dense_to_one_hot(train_labels, MNISTDataset.num_classes)
-        validation_labels = Utils.dense_to_one_hot(validation_labels, MNISTDataset.num_classes)
-        test_labels = Utils.dense_to_one_hot(test_labels, MNISTDataset.num_classes)
+        train_labels = utils.dense_to_one_hot(train_labels, MNISTDataset.num_classes)
+        validation_labels = utils.dense_to_one_hot(validation_labels, MNISTDataset.num_classes)
+        test_labels = utils.dense_to_one_hot(test_labels, MNISTDataset.num_classes)
 
         self._train = Dataset(train_images, train_labels, MNISTDataset.num_classes)
         self._validation = Dataset(validation_images, validation_labels, MNISTDataset.num_classes)
@@ -437,13 +437,13 @@ class CIFAR10Dataset:
     test_size = 10000  # number of images and labels for test dataset
 
     def __init__(self, data_dir):
-
         train_validation_images = None
         train_validation_labels = None
 
         for i in range(1, 6):
             data_dic = CIFAR10Dataset.unpickle("{}/data_batch_{}".format(data_dir, i))
             if i == 1:
+
                 train_validation_images = data_dic['data']
                 train_validation_labels = data_dic['labels']
             else:
@@ -466,13 +466,42 @@ class CIFAR10Dataset:
                                                                                             random_state=42)
 
         # convert labels into one-hot vectors
-        train_labels = Utils.dense_to_one_hot(train_labels, MNISTDataset.num_classes)
-        validation_labels = Utils.dense_to_one_hot(validation_labels, MNISTDataset.num_classes)
-        test_labels = Utils.dense_to_one_hot(test_labels, MNISTDataset.num_classes)
+        train_labels = utils.dense_to_one_hot(train_labels, MNISTDataset.num_classes)
+        validation_labels = utils.dense_to_one_hot(validation_labels, MNISTDataset.num_classes)
+        test_labels = utils.dense_to_one_hot(test_labels, MNISTDataset.num_classes)
+
+        # # save a copy of original dataset
+        # self._train_images_copy = np.copy(train_images)
+        # self._train_labels_copy = np.copy(train_labels)
+        # self._validation_images_copy = np.copy(validation_images)
+        # self._validation_labels_copy = np.copy(validation_labels)
+        # self._test_images_copy = np.copy(test_images)
+        # self._test_labels_copy = np.copy(test_labels)
 
         self._train = Dataset(train_images, train_labels, MNISTDataset.num_classes)
         self._validation = Dataset(validation_images, validation_labels, MNISTDataset.num_classes)
         self._test = Dataset(test_images, test_labels, MNISTDataset.num_classes)
+
+        # reset Dataset's random generator
+        Dataset.reset_rg()
+
+    def my_train_test_split(self, train_validation_images, train_validation_labels):
+        perm = np.arange(0, CIFAR10Dataset.train_validation_size)
+        Dataset.rg.shuffle(perm)
+        train_images = train_validation_images[perm[:CIFAR10Dataset.train_size]].copy()
+        train_labels = train_validation_labels[perm[:CIFAR10Dataset.train_size]].copy()
+        validation_images = train_validation_images[perm[CIFAR10Dataset.train_size:]].copy()
+        validation_labels = train_validation_labels[perm[CIFAR10Dataset.train_size:]].copy()
+        del train_validation_images
+        del train_validation_labels
+        return train_images, validation_images, train_labels, validation_labels
+
+    def restore_original_dataset(self):
+        self._train = Dataset(np.copy(self._train_images_copy), np.copy(self._train_labels_copy),
+                              MNISTDataset.num_classes)
+        self._validation = Dataset(np.copy(self._validation_images_copy), np.copy(self._validation_labels_copy),
+                                   MNISTDataset.num_classes)
+        self._test = Dataset(np.copy(self._test_images_copy), np.copy(self._test_labels_copy), MNISTDataset.num_classes)
 
         # reset Dataset's random generator
         Dataset.reset_rg()

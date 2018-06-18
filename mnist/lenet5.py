@@ -6,7 +6,7 @@ import tensorflow as tf
 from tensorflow.contrib.layers import flatten
 
 from training_plotter import TrainingPlotter
-from utils import Utils
+import utils
 
 logging.config.fileConfig('logging.conf')
 
@@ -21,12 +21,12 @@ class Lenet5(object):
                  variable_stddev=1., learning_rate=0.001, drop_out_keep_prob=0.5, display_summary=True):
         save_dir_full_path = os.path.join(os.getcwd(), os.path.dirname(save_dir))
         self.file_name = '{}/Lenet5_{}_{}.learning_curve.png'.format(save_dir_full_path, model_name,
-                                                                     Utils.now_as_str())
-        self.file_name_model = '{}/Lenet5_{}_{}.model.ckpt'.format(save_dir_full_path, model_name, Utils.now_as_str())
+                                                                     utils.now_as_str())
+        self.file_name_model = '{}/Lenet5_{}_{}.model.ckpt'.format(save_dir_full_path, model_name, utils.now_as_str())
         self.file_name_confusion_matrix = '{}/Lenet5_{}_{}.confusion_matrix.png'.format(save_dir_full_path, model_name,
-                                                                                        Utils.now_as_str())
+                                                                                        utils.now_as_str())
         self.file_name_wrong_predicts = '{}/Lenet5_{}_{}.wrong_predicts.png'.format(save_dir_full_path, model_name,
-                                                                                    Utils.now_as_str())
+                                                                                    utils.now_as_str())
         title = "{}_{}_epochs_{}_batch_size_{}_learning_rate_{}_keep_prob_{}_variable_stddev_{}".format(
             self.__class__.__name__, model_name, epochs, batch_size, learning_rate, drop_out_keep_prob, variable_stddev)
         self.plotter = TrainingPlotter(title, self.file_name, show_plot_window=show_plot_window)
