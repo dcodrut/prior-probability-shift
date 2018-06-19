@@ -237,10 +237,11 @@ class Dataset(object):
 
         # exclude the labels which counts are 0, for preventing divide by 0
         current_min_count = np.min(self.counts_per_class[self.counts_per_class > 0])
-        ratio = target_min_count / current_min_count
-        target_counts = np.floor(self.counts_per_class * ratio).astype(np.int32)
+        if current_min_count < target_min_count:
+            ratio = target_min_count / current_min_count
+            target_counts = np.floor(self.counts_per_class * ratio).astype(np.int32)
 
-        self._oversampling_until_counts(target_counts)
+            self._oversampling_until_counts(target_counts)
 
     def _oversampling_until_counts(self, target_counts):
         new_indices = np.empty(np.sum(target_counts), dtype=np.int32)
