@@ -1,3 +1,5 @@
+# Source: https://github.com/JamesLuoau/Traffic-Sign-Recognition-with-Deep-Learning-CNN
+
 """A class to generate plots for the results of applied loss functions and/or
 accuracy of models trained with machine learning methods.
 
@@ -33,11 +35,12 @@ Example, update the validation line only every 10th epoch:
 from __future__ import absolute_import
 from __future__ import print_function
 
+import math
+import warnings
+from collections import OrderedDict
+
 import matplotlib.pyplot as plt
 import numpy as np
-import warnings
-import math
-from collections import OrderedDict
 
 
 def ignore_nan_and_inf(value, label, x_index):

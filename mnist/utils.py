@@ -10,12 +10,23 @@ from matplotlib.transforms import Bbox, TransformedBbox
 
 
 def concat_images(images, image_size, num_images_on_x, num_images_on_y):
-    big_image = np.zeros((num_images_on_x * image_size, num_images_on_y * image_size))
+    channels = images[0].shape[2]
+    if channels == 1:
+        big_image = np.zeros((num_images_on_x * image_size, num_images_on_y * image_size))
+    else:
+        big_image = np.zeros((num_images_on_x * image_size, num_images_on_y * image_size, channels))
     for i in range(num_images_on_x):
         for j in range(num_images_on_y):
             if i * num_images_on_y + j < images.shape[0]:
-                big_image[i * image_size:(i + 1) * image_size, j * image_size:(j + 1) * image_size] = \
-                    images[i * num_images_on_y + j, :, :, 0]
+                start_i = i * image_size
+                stop_i = (i + 1) * image_size
+                start_j = j * image_size
+                stop_j = (j + 1) * image_size
+                if channels == 1:
+                    big_image[start_i:stop_i, start_j:stop_j] = images[i * num_images_on_y + j, :, :, 0]
+                else:
+                    big_image[start_i:stop_i, start_j:stop_j, :] = images[i * num_images_on_y + j, :, :, :]
+
     return big_image
 
 
@@ -273,12 +284,10 @@ def get_indices_wrt_distr(labels, weights, global_max_weight=None, max_no_exampl
     # make sure that weights sum to 1
     weights = np.array(weights)
     weights = weights / sum(weights)
-    # print('weights = ', weights)
     num_examples_from_each_class = np.floor(weights * no_examples).astype(np.int32)
-    # print('num_examples_from_each_class = ', num_examples_from_each_class)
+
     # if we don't have already no_samples examples, share the remaining ones, starting with the most weighted class
     diff = no_examples - np.sum(num_examples_from_each_class)
-    # print('diff = ', diff)
     if diff > 0:
         indices_sorted_weights = np.argsort(-weights)  # sort descending
         k = 0
@@ -288,19 +297,11 @@ def get_indices_wrt_distr(labels, weights, global_max_weight=None, max_no_exampl
             k = (k + 1) % len(weights)
 
     indices_wrt_distr = None
-    # k = 0
-    # while sum(num_examples_from_each_class) > 0:
-    #     if num_examples_from_each_class[labels[k]] > 0:
-    #         indices_wrt_distr.append(k)
-    #         num_examples_from_each_class[labels[k]] -= 1
-    #     k += 1
 
     indices_per_class = (np.arange(10) == labels[:, np.newaxis])
     for i in range(10):
         if num_examples_from_each_class[i] > 0:
             indices_of_class_i = np.where(indices_per_class[:, i] == True)[0]
-            # print(indices_of_class_i[0:num_examples_from_each_class[i]])
-            # print(np.sum(indices_of_class_i[0:num_examples_from_each_class[i]]))
             perm = np.arange(0, counts_per_class[i])
             Dataset.rg.shuffle(perm)
             random_indices_to_append = indices_of_class_i[perm[:num_examples_from_each_class[i]]]
@@ -335,7 +336,7 @@ def distr_sequence_to_rgb_image(color_list, distr_sequence, width=800, height=15
 
 
 def plot_sequence_of_distr(list_no_examples_from_each_distr, distr_sequence, method, fig_title, color_list,
-                           window_length=None, save_to_file=False):
+                           window_length=None, save_to_file=False, img_width=800):
     sequence_of_images_length = int(np.sum(list_no_examples_from_each_distr))
     if method == 'bar_plot':
         my_dpi = 100
@@ -366,7 +367,7 @@ def plot_sequence_of_distr(list_no_examples_from_each_distr, distr_sequence, met
         plt.figure(figsize=(80, 15), dpi=50)
         width = 800
         height = 150
-        plt.imshow(distr_sequence_to_rgb_image(color_list, distr_sequence))
+        plt.imshow(distr_sequence_to_rgb_image(color_list, distr_sequence, width=img_width))
         plt.tick_params(labelsize=35)
         xticks_array = np.append([0], np.cumsum(list_no_examples_from_each_distr))
         if window_length is not None:
@@ -378,5 +379,5 @@ def plot_sequence_of_distr(list_no_examples_from_each_distr, distr_sequence, met
         plt.title(fig_title, fontsize=70, y=1.05)
     plt.grid(axis='x', linewidth=6, linestyle='--')
     if save_to_file:
-        plt.savefig('./results/Notebook4/{}.png'.format(fig_title), bbox_inches='tight', pad_inches=1)
+        plt.savefig('{}.png'.format(fig_title), bbox_inches='tight', pad_inches=1)
     plt.show()

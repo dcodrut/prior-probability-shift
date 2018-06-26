@@ -5,8 +5,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.layers import flatten
 
-from training_plotter import TrainingPlotter
 import utils
+from training_plotter import TrainingPlotter
 
 logging.config.fileConfig('logging.conf')
 
@@ -23,6 +23,10 @@ class Lenet5WithDistr(object):
                  distr_pos=[False, False, False, False, False]):
 
         if distr_pos is None:
+            distr_pos_to_save = -1
+        else:
+            distr_pos_to_save = distr_pos
+        if distr_pos is None or (isinstance(distr_pos, np.int32) and distr_pos == -1):
             distr_pos = [False, False, False, False, False]
 
         self.verbose = verbose
@@ -58,7 +62,7 @@ class Lenet5WithDistr(object):
         self.y = tf.placeholder(tf.float32, (None, self.label_size))
         self.train_distr = tf.Variable(initial_value=self.dataset.train.label_distr, name='train_distr')
         self.test_distr = tf.Variable(initial_value=self.dataset.test.label_distr, name='test_distr')
-        self.distr_pos = tf.Variable(initial_value=distr_pos, name='distr_pos')
+        self.distr_pos = tf.Variable(initial_value=distr_pos_to_save, name='distr_pos')
         self.train_num_examples = tf.Variable(initial_value=self.dataset.train.num_examples,
                                               name='train_num_examples')
         self.y_distr = tf.placeholder(tf.float32, (self.label_size,), name='y_distr')  # the new input (label distr.)
@@ -332,7 +336,7 @@ class Lenet5WithDistr(object):
         else:
             return loss, acc, predict.astype(np.int32), actual.astype(np.int32)
 
-    def train(self, distrs_list=None, use_shuffling_inside_class=False):
+    def train(self, distrs_list=None, use_shuffling_inside_class=False, attach_imposed_distr=False):
         # reset epoch_completed and indices_in_epoch fields from mnist dataset
         # (in case if the same object is used for multiple trainings)
         self.dataset.train.reset_epochs_completed()
@@ -367,18 +371,19 @@ class Lenet5WithDistr(object):
                         k = (k + 1) % len(distrs_list)
                         batch_x, batch_y = self.dataset.train.next_batch(self.batch_size, distr_to_impose,
                                                                          use_shuffling_inside_class)
-                        # print('Step = {} --- Distr to impose: {}'.format(step, distr_to_impose))
-
                     batch_y_distr = np.bincount(np.argmax(batch_y, axis=1),
                                                 minlength=self.dataset.num_classes) / batch_y.shape[0]
-                    # print('Step = {} --- batch_y_distr: {}'.format(step, batch_y_distr))
 
-                    # print(batch_y.shape)
+                    if attach_imposed_distr:
+                        distr_to_attach = distr_to_impose
+                    else:
+                        distr_to_attach = batch_y_distr
+
                     _, train_loss, train_acc, batch_distr_out = self.session.run(
                         [self.train_op, self.loss_op, self.accuracy_op, self.batch_distr],
-                        feed_dict={self.x: batch_x, self.y: batch_y, self.y_distr: batch_y_distr,
+                        feed_dict={self.x: batch_x, self.y: batch_y, self.y_distr: distr_to_attach,
                                    self.keep_prob: self.drop_out_keep_prob})
-                    # print(batch_distr_out.shape, batch_distr_out[0:2,:])
+
                     total_tran_loss += (train_loss * batch_x.shape[0])
                     total_tran_acc += (train_acc * batch_x.shape[0])
                     concrete_num_examples_used_in_last_epoch += batch_x.shape[0]

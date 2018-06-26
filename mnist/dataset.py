@@ -2,8 +2,8 @@ import pickle
 
 from sklearn.model_selection import train_test_split
 
-from enhance_data import *
 import utils
+from enhance_data import *
 
 
 class Dataset(object):
@@ -120,7 +120,6 @@ class Dataset(object):
             start_indices = np.empty_like(self._indices_in_epoch)
             np.copyto(start_indices, self._indices_in_epoch)
             num_examples_from_each_class = np.floor(weights * batch_size).astype(np.int32)
-            # print('Imposing distr: num_examples_from_each_class = ', num_examples_from_each_class)
 
             # if we don't have batch_size examples, share the remaining ones, starting with the most weighted class
             diff = batch_size - np.sum(num_examples_from_each_class)
@@ -132,7 +131,7 @@ class Dataset(object):
                     num_examples_from_each_class[indices_sorted_weights[k]] += 1
                     diff -= 1
                     k = (k + 1) % len(weights)
-            # print('Imposing distr: num_examples_from_each_class = ', num_examples_from_each_class)
+
             self._indices_in_epoch += num_examples_from_each_class
             if np.sum(self._indices_in_epoch > self._counts_per_class) > 0:
                 # Finished epoch
@@ -165,33 +164,24 @@ class Dataset(object):
             batch_x = np.empty((batch_size,) + self._images[0].shape, dtype=np.float32)
             batch_y = np.empty((batch_size, self._num_classes))
             start_index_in_batch = 0
-            # print('num_examples_from_each_class = ', num_examples_from_each_class)
-            # print('start_indices = ', start_indices)
-            # print('end_indices = ', end_indices)
-            # indices_wrt_distr = None
+
             for i in range(self.num_classes):
                 if num_examples_from_each_class[i] > 0:
                     images_of_class_i = self._images[self._indices_per_class[:, i]]
                     labels_of_class_i = self._labels[self._indices_per_class[:, i]]
-                    # indices_of_class_i = np.where(self._indices_per_class[:, i] == True)[0]
                     end_index_in_batch = start_index_in_batch + num_examples_from_each_class[i]
                     batch_x[start_index_in_batch:end_index_in_batch, ] = \
                         images_of_class_i[start_indices[i]:end_indices[i], ]
                     batch_y[start_index_in_batch:end_index_in_batch] = labels_of_class_i[
                                                                        start_indices[i]:end_indices[i]]
                     start_index_in_batch = end_index_in_batch
-                    # if indices_wrt_distr is None:
-                    #     indices_wrt_distr = indices_of_class_i[start_indices[i]:end_indices[i]]
-                    # else:
-                    #     indices_wrt_distr = np.append(indices_wrt_distr,
-                    #                                   indices_of_class_i[start_indices[i]:end_indices[i]])
+
             # shuffle images inside batch because they're ordered by label
             perm = np.arange(batch_size)
-            # Dataset.reset_rg()
+
             Dataset.rg.shuffle(perm)
             batch_x = batch_x[perm]
             batch_y = batch_y[perm]
-            # indices_wrt_distr = indices_wrt_distr[perm]
 
         return batch_x, batch_y
 
@@ -224,7 +214,7 @@ class Dataset(object):
         target_distr = weights
         current_distr[current_distr == 0] = 1  # for preventing divide by zero
         ratio = (target_distr / current_distr) / np.min((target_distr / current_distr))
-        target_counts = np.floor(self.counts_per_class * ratio).astype(np.int32)
+        target_counts = np.ceil(self.counts_per_class * ratio).astype(np.int32)
 
         self._oversampling_until_counts(target_counts)
 
@@ -239,7 +229,7 @@ class Dataset(object):
         current_min_count = np.min(self.counts_per_class[self.counts_per_class > 0])
         if current_min_count < target_min_count:
             ratio = target_min_count / current_min_count
-            target_counts = np.floor(self.counts_per_class * ratio).astype(np.int32)
+            target_counts = np.ceil(self.counts_per_class * ratio).astype(np.int32)
 
             self._oversampling_until_counts(target_counts)
 

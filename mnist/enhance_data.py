@@ -1,9 +1,8 @@
-# https://github.com/JamesLuoau/Traffic-Sign-Recognition-with-Deep-Learning-CNN
+# Source: https://github.com/JamesLuoau/Traffic-Sign-Recognition-with-Deep-Learning-CNN
 
-import math
+import numpy as np
 import scipy.ndimage
 import skimage.transform
-import numpy as np
 
 
 def enhance_with_random_rotate(images, labels, ratio):
