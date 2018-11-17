@@ -1,15 +1,15 @@
 #ignore mnist_dataset
-mnist/mnist_dataset
+mnist_dataset
 
 #ignore my temporary folders
-mnist/_aux
+_aux
 
 #ignore results folder
-mnist/results
+results
 
 #ignore Jupyter and PyCharm temporary folder
-mnist/.idea
-mnist/.ipynb_checkpoints
-mnist/__pycache__
+.idea
+.ipynb_checkpoints
+__pycache__
 
 *.png
