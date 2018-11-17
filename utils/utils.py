@@ -258,7 +258,7 @@ def get_all_files_from_dir_ending_with(directory, ending, without_file_extension
 
 
 def get_indices_wrt_distr(labels, weights, global_max_weight=None, max_no_examples=None):
-    from dataset import Dataset
+    from utils.dataset import Dataset
     """
       :param labels: list of labels for imposing distribution
       :param weights: label distribution

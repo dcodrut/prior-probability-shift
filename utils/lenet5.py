@@ -5,8 +5,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.layers import flatten
 
-from training_plotter import TrainingPlotter
-import utils
+from utils.training_plotter import TrainingPlotter
+from utils import utils
 
 logging.config.fileConfig('logging.conf')
 

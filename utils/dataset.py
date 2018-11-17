@@ -2,8 +2,8 @@ import pickle
 
 from sklearn.model_selection import train_test_split
 
-import utils
-from enhance_data import *
+from utils import utils
+from utils.enhance_data import *
 
 
 class Dataset(object):

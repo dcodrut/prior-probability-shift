@@ -1,5 +1,5 @@
-#ignore mnist_dataset
-mnist_dataset
+#ignore datasets
+datasets
 
 #ignore my temporary folders
 _aux

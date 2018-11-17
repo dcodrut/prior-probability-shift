@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
-from laplotter import LossAccPlotter
+from utils.laplotter import LossAccPlotter
 
 
 class TrainingPlotter(object):
