@@ -13,255 +13,255 @@ logging.config.fileConfig('logging.conf')
 
 class Lenet5WithDistr(object):
     """
-        Implements a Lenet5 architecture and some methods for training, test and evaluation
-        As input, along with the image, we add label distribution
+        Implements a Lenet5 architecture and methods for training, test and evaluation
+        As input to different layers we also add the label distribution
     """
 
-    def __init__(self, dataset, save_dir='results/', model_name='no_name', show_plot_window=False,
-                 epochs=100, batch_size=500, variable_mean=0.,
-                 variable_stddev=1., learning_rate=0.001, drop_out_keep_prob=0.5, verbose=True,
-                 distr_pos=[False, False, False, False, False]):
+    NO_LAYERS = 5
 
-        if distr_pos is None:
-            distr_pos_to_save = -1
-        else:
-            distr_pos_to_save = distr_pos
-        if distr_pos is None or (isinstance(distr_pos, np.int32) and distr_pos == -1):
-            distr_pos = [False, False, False, False, False]
+    # default hyperparameters
+    DEFAULT_SAVE_ROOT_DIR = './results/'
+    DEFAULT_MODEL_NAME = ''
+    DEFAULT_SHOW_PLOT_WINDOW = False
+    DEFAULT_NO_EPOCHS = 100
+    DEFAULT_BATCH_SIZE = 500
+    DEFAULT_VARIABLE_MEAN = 0.0
+    DEFAULT_VARIABLE_STDDEV = 1.0
+    DEFAULT_LEARNING_RATE = 0.001
+    DEFAULT_DROPOUT_KEEP_PROB = 1.0
+    DEFAULT_VERBOSE = True
+    DEFAULT_DISTR_POS = tuple([False] * NO_LAYERS)
+    DEFAULT_DISTR_LIST = None
+    DEFAULT_SHUFFLE_INSIDE_CLASS = False
+    DEFAULT_ATTACH_IMPOSED_DISTR = False
+    DEFAULT_SEED = 112358
+    NO_DISTR_USED = -1
 
+    def __init__(self, dataset, save_root_dir=DEFAULT_SAVE_ROOT_DIR, model_name=DEFAULT_MODEL_NAME,
+                 show_plot_window=DEFAULT_SHOW_PLOT_WINDOW, verbose=DEFAULT_VERBOSE, epochs=DEFAULT_NO_EPOCHS,
+                 batch_size=DEFAULT_BATCH_SIZE, variable_mean=DEFAULT_VARIABLE_MEAN,
+                 variable_stddev=DEFAULT_VARIABLE_STDDEV, learning_rate=DEFAULT_LEARNING_RATE,
+                 drop_out_keep_prob=DEFAULT_DROPOUT_KEEP_PROB, distr_pos=DEFAULT_DISTR_POS,
+                 attach_imposed_distr=DEFAULT_ATTACH_IMPOSED_DISTR, distrs_list=DEFAULT_DISTR_LIST,
+                 shuffle_inside_class=DEFAULT_SHUFFLE_INSIDE_CLASS, seed=DEFAULT_SEED):
+
+        """
+        :param dataset: the dataset containing train/validation/test subsets
+        :param save_root_dir: the root directory where the training results will be stored
+        :param model_name: a label assigned to a run instance
+        :param show_plot_window: a flag for displaying or nor the training curse in real time
+        :param verbose: a flag for displaying or not logs during training
+        :param epochs: the number of epochs
+        :param batch_size: the batch size
+        :param variable_mean: the mean of the normal distribution used for weights initializing
+        :param variable_stddev: the standard deviation of the normal distribution used for weights initializing
+        :param learning_rate: the learning rate
+        :param drop_out_keep_prob: the probability of keeping the units
+        :param distr_pos: a boolean array (with the size given by number of layers) which specifies in which layers the
+                          distribution will be concatenated as input;
+
+        :param attach_imposed_distr: a boolean which is True if the theoretical distribution will be attached as input
+                                     (i.e. the one imposed over the batch); otherwise the empirical one will be attached
+                                     (i.e. the label distribution of the batch will be calculated)
+
+        :param distrs_list: a list containing the distributions used for generating the batches
+                           if None, random batches will be used
+
+        :param shuffle_inside_class: parameter for impose_distribution method of Dataset class
+
+        :param seed: the seed used for all random processes (e.g. generating the weights random initializations,
+                     for dropout (if used) etc)
+        """
+        self.dataset = dataset
+
+        # settings
+        self.save_root_dir = save_root_dir
+        self.model_name = model_name
+        self.show_plot_window = show_plot_window
         self.verbose = verbose
-        save_dir_full_path = os.path.join(os.getcwd(), os.path.dirname(save_dir))
-        base_file_name = '{}/{}_{}_{}'.format(save_dir_full_path, self.__class__.__name__, model_name,
+        self.seed = seed
+
+        # set hyperparameters
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self.variable_mean = variable_mean
+        self.variable_stddev = variable_stddev
+        self.learning_rate = learning_rate
+        self.drop_out_keep_prob = drop_out_keep_prob
+        self.distr_pos = distr_pos
+        self.attach_imposed_distr = attach_imposed_distr
+        self.distrs_list = distrs_list
+        self.shuffle_inside_class = shuffle_inside_class
+
+        # use a timestamp to identify the current run instance
+        self.ts = utils.now_as_ts()
+
+        # set other useful variables
+        self.num_color_channels = self.dataset.train.images.shape[3]
+        self.num_classes = self.dataset.num_classes
+        self.labels_name = [str(i) for i in range(self.num_classes)]
+
+        self._prepare_files()
+
+        # build the computational graph
+        self.graph = self.TfGraph(self)
+
+        # set the current session
+        self.session = None
+
+        # display the summary of the dataset
+        if self.verbose:
+            logging.info(dataset.summary)
+
+    def _prepare_files(self):
+        # check if the save root directory exists, otherwise create it
+        if not os.path.isdir(self.save_root_dir):
+            os.mkdir(self.save_root_dir)
+
+        # make a dir inside the save root directory for the current run instance
+        self.save_dir = os.path.join(self.save_root_dir, str(self.ts))
+        os.mkdir(self.save_dir)
+
+        # prepare all necessary files for saving the learning process results
+        base_file_name = '{}/{}_{}_{}'.format(self.save_dir, self.__class__.__name__, self.model_name,
                                               utils.now_as_str())
         self.file_name_learning_curve = '{}.learning_curve.png'.format(base_file_name)
         self.file_name_model = '{}.model.ckpt'.format(base_file_name)
         self.file_name_confusion_matrix = '{}.confusion_matrix.png'.format(base_file_name)
         self.file_name_wrong_predicts = '{}.wrong_predicts.png'.format(base_file_name)
+        self.plotter = TrainingPlotter(title="{}_{}".format(self.__class__.__name__, self.model_name),
+                                       file_name=self.file_name_learning_curve, show_plot_window=self.show_plot_window)
 
-        self.plotter = TrainingPlotter(title="{}_{}".format(self.__class__.__name__, model_name),
-                                       file_name=self.file_name_learning_curve, show_plot_window=show_plot_window)
-
-        self.dataset = dataset
-        self.seed = self.dataset.train.seed
-        self.epochs = epochs
-        self.batch_size = batch_size
-        self.label_size = dataset.num_classes
-        self.labels_name = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
-        self.variable_mean = variable_mean
-        self.variable_stddev = variable_stddev
-
-        if self.verbose:
-            logging.info(dataset.summary)
-
-        self.session = None
-
-        # clear the default graph
-        tf.reset_default_graph()
-
-        color_channel = dataset.train.images.shape[3]
-        self.x = tf.placeholder(tf.float32, (None, dataset.image_size, dataset.image_size, color_channel))
-        self.y = tf.placeholder(tf.float32, (None, self.label_size))
-        self.train_distr = tf.Variable(initial_value=self.dataset.train.label_distr, name='train_distr')
-        self.test_distr = tf.Variable(initial_value=self.dataset.test.label_distr, name='test_distr')
-        self.distr_pos = tf.Variable(initial_value=distr_pos_to_save, name='distr_pos')
-        self.train_num_examples = tf.Variable(initial_value=self.dataset.train.num_examples,
-                                              name='train_num_examples')
-        self.y_distr = tf.placeholder(tf.float32, (self.label_size,), name='y_distr')  # the new input (label distr.)
-        self.keep_prob = tf.placeholder(tf.float32)
-        self.drop_out_keep_prob = drop_out_keep_prob
-        self.network = Lenet5WithDistr._LeNet(self, self.x, color_channel, variable_mean, variable_stddev, distr_pos)
-
-        self.prediction_softmax = tf.nn.softmax(self.network)
-        self.loss_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.y, logits=self.network))
-        self.opt = tf.train.AdamOptimizer(learning_rate=learning_rate)
-        self.train_op = self.opt.minimize(self.loss_op)
-        self.correct_prediction = tf.equal(tf.argmax(self.network, 1), tf.argmax(self.y, 1))
-        self.accuracy_op = tf.reduce_mean(tf.cast(self.correct_prediction, tf.float32))
-
-    def _LeNet(self, x, color_channel, variable_mean, variable_stddev, distr_pos):
+    class TfGraph:
         """
-        Implementation of the LeNet5 architecture plus label distribution as input
-        :param x: input images
-        :param color_channel:
-        :param variable_mean:
-        :param variable_stddev:
-        :return: the result of the last fully connected layer
+        Implements all the operations in the current graph, corresponding to Lenet5 architecture and appends the
+        distribution in the layers specified (if any).
         """
-        # Hyperparameters
-        distr_size = self.dataset.num_classes
-        patch_size = 5
-        conv_layer_1_depth = 6
-        conv_layer_2_depth = 16
-        fc_layer_1_size = 400
-        fc_layer_2_size = 120
-        fc_layer_3_size = 84
-        mu = variable_mean
-        sigma = variable_stddev
 
-        # tile y_distr in order to attach it as input for network's layers
-        self.batch_distr = tf.reshape(tf.tile(input=self.y_distr, multiples=[tf.shape(x)[0]]),
-                                      shape=[tf.shape(x)[0], distr_size])
-        # self.batch_distr = batch_distr
-        # implement network architecture
-        self.c1_weights = tf.Variable(
-            tf.truncated_normal(shape=(patch_size, patch_size, color_channel, conv_layer_1_depth), mean=mu,
-                                stddev=sigma, seed=self.seed))
-        self.c1_biases = tf.Variable(tf.zeros(conv_layer_1_depth))
-        if distr_pos[0]:
-            if self.verbose:
-                logging.debug('Attached distr. before C1 (at input)')
-            temp = tf.concat([tf.zeros(x.shape[2] - self.batch_distr.shape[1]), self.y_distr], axis=0)
-            distr_to_concat_c = tf.reshape(tf.tile(input=temp, multiples=[tf.shape(x)[0]]),
-                                           shape=[tf.shape(x)[0], 1, int(temp.shape[0]), 1])
-            x = tf.concat([x, distr_to_concat_c], axis=1)
-        self.c1 = tf.nn.conv2d(x, self.c1_weights, strides=[1, 1, 1, 1], padding='SAME') + self.c1_biases
-        self.c1 = tf.nn.relu(self.c1)
+        def __init__(self, l5):
+            # clear the default graph
+            tf.reset_default_graph()
 
-        self.s1 = tf.nn.max_pool(self.c1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
-        # s1 = tf.nn.dropout(s1, self.keep_prob, seed=self.mnist_dataset.train.seed)
+            # set input variables
+            self.input_image = tf.placeholder(tf.float32, (None, l5.dataset.image_size, l5.dataset.image_size,
+                                                           l5.num_color_channels))
+            self.y = tf.placeholder(tf.float32, (None, l5.dataset.num_classes))
+            self.train_distr = tf.Variable(initial_value=l5.dataset.train.label_distr, name='train_distr')
+            self.test_distr = tf.Variable(initial_value=l5.dataset.test.label_distr, name='test_distr')
+            self.distr_pos = tf.Variable(initial_value=l5.distr_pos, name='distr_pos')
+            self.train_num_examples = tf.Variable(initial_value=l5.dataset.train.num_examples,
+                                                  name='train_num_examples')
+            self.y_distr = tf.placeholder(tf.float32, (l5.num_classes,), name='y_distr')
+            self.keep_prob = tf.placeholder(tf.float32)
 
-        self.c2_weights = tf.Variable(
-            tf.truncated_normal(shape=(patch_size, patch_size, conv_layer_1_depth, conv_layer_2_depth), mean=mu,
-                                stddev=sigma, seed=self.seed))
-        self.c2_biases = tf.Variable(tf.zeros(conv_layer_2_depth))
+            # build intput to output operations
+            _patch_size = 5
+            _conv_layer_1_depth = 6
+            _conv_layer_2_depth = 16
+            _fc_layer_1_size = 400
+            _fc_layer_2_size = 120
+            _fc_layer_3_size = 84
+            _mu = l5.variable_mean
+            _sigma = l5.variable_stddev
 
-        if distr_pos[1]:
-            if self.verbose:
-                logging.debug('Attached distr. before C2')
-            temp = tf.concat([tf.zeros(self.s1.shape[2] - self.batch_distr.shape[1]), self.y_distr], axis=0)
-            self.distr_to_concat_c = tf.reshape(tf.tile(input=temp, multiples=[tf.shape(self.s1)[0]]),
-                                                shape=[tf.shape(self.s1)[0], 1, int(temp.shape[0])])
-            new_s1 = []
-            for i in range(self.s1.shape[3]):
-                new_s1.append(tf.concat([self.s1[:, :, :, i], self.distr_to_concat_c], axis=1))
-            self.s1 = tf.stack(new_s1, axis=3)
-        self.c2 = tf.nn.conv2d(self.s1, self.c2_weights, strides=[1, 1, 1, 1], padding='VALID') + self.c2_biases
-        self.c2 = tf.nn.relu(self.c2)
+            # tile y_distr in order to attach it as input for network's layers
+            self.batch_distr = tf.reshape(tf.tile(input=self.y_distr, multiples=[tf.shape(self.input_image)[0]]),
+                                          shape=[tf.shape(self.input_image)[0], l5.num_classes])
+            self.c1_weights = tf.Variable(
+                tf.truncated_normal(shape=(_patch_size, _patch_size, l5.num_color_channels, _conv_layer_1_depth),
+                                    mean=_mu, stddev=_sigma, seed=l5.seed))
+            self.c1_biases = tf.Variable(tf.zeros(_conv_layer_1_depth))
+            if l5.distr_pos[0]:
+                if l5.verbose:
+                    logging.debug('Attached distr. before C1 (at input)')
+                temp = tf.concat([tf.zeros(self.input_image.shape[2] - self.batch_distr.shape[1]), self.y_distr],
+                                 axis=0)
+                distr_to_concat_c = tf.reshape(tf.tile(input=temp, multiples=[tf.shape(self.input_image)[0]]),
+                                               shape=[tf.shape(self.input_image)[0], 1, int(temp.shape[0]), 1])
+                self.tf_all_inputs = tf.concat([self.input_image, distr_to_concat_c], axis=1)
+            else:
+                self.tf_all_inputs = self.input_image
 
-        self.s2 = tf.nn.max_pool(self.c2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
-        # s2 = tf.nn.dropout(s2, self.keep_prob, seed=self.mnist_dataset.train.seed)
-        self.s2 = flatten(self.s2)
+            self.c1 = tf.nn.conv2d(self.tf_all_inputs, self.c1_weights, strides=[1, 1, 1, 1],
+                                   padding='SAME') + self.c1_biases
+            self.c1 = tf.nn.relu(self.c1)
+            self.s1 = tf.nn.max_pool(self.c1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+            self.c2_weights = tf.Variable(
+                tf.truncated_normal(shape=(_patch_size, _patch_size, _conv_layer_1_depth, _conv_layer_2_depth),
+                                    mean=_mu, stddev=_sigma, seed=l5.seed))
+            self.c2_biases = tf.Variable(tf.zeros(_conv_layer_2_depth))
 
-        if distr_pos[2]:
-            if self.verbose:
-                logging.debug('Attached distr. before F1')
-            self.s2 = tf.concat([self.s2, self.batch_distr], axis=1)
+            if l5.distr_pos[1]:
+                if l5.verbose:
+                    logging.debug('Attached distr. before C2')
+                temp = tf.concat([tf.zeros(self.s1.shape[2] - self.batch_distr.shape[1]), self.y_distr], axis=0)
+                distr_to_concat_c = tf.reshape(tf.tile(input=temp, multiples=[tf.shape(self.s1)[0]]),
+                                               shape=[tf.shape(self.s1)[0], 1, int(temp.shape[0])])
+                new_s1 = []
+                for i in range(self.s1.shape[3]):
+                    new_s1.append(tf.concat([self.s1[:, :, :, i], distr_to_concat_c], axis=1))
+                self.s1 = tf.stack(new_s1, axis=3)
+            self.c2 = tf.nn.conv2d(self.s1, self.c2_weights, strides=[1, 1, 1, 1], padding='VALID') + self.c2_biases
+            self.c2 = tf.nn.relu(self.c2)
+            self.s2 = tf.nn.max_pool(self.c2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+            self.s2 = flatten(self.s2)
 
-        fc_layer_1_size = int(self.s2.shape[1])
-        self.fc1_weights = tf.Variable(
-            tf.truncated_normal(shape=(fc_layer_1_size, fc_layer_2_size), mean=mu, stddev=sigma, seed=self.seed))
-        self.fc1_biases = tf.Variable(tf.zeros(fc_layer_2_size))
-        self.fc1 = tf.matmul(self.s2, self.fc1_weights) + self.fc1_biases
-        self.fc1 = tf.nn.relu(self.fc1)
-        self.fc1 = tf.nn.dropout(self.fc1, self.keep_prob, seed=self.seed)
+            if l5.distr_pos[2]:
+                if l5.verbose:
+                    logging.debug('Attached distr. before F1')
+                self.s2 = tf.concat([self.s2, self.batch_distr], axis=1)
 
-        if distr_pos[3]:
-            if self.verbose:
-                logging.debug('Attached distr. before F2')
-            self.fc1 = tf.concat([self.fc1, self.batch_distr], axis=1)
+            _fc_layer_1_size = int(self.s2.shape[1])
+            self.fc1_weights = tf.Variable(
+                tf.truncated_normal(shape=(_fc_layer_1_size, _fc_layer_2_size), mean=_mu, stddev=_sigma, seed=l5.seed))
+            self.fc1_biases = tf.Variable(tf.zeros(_fc_layer_2_size))
+            self.fc1 = tf.matmul(self.s2, self.fc1_weights) + self.fc1_biases
+            self.fc1 = tf.nn.relu(self.fc1)
+            self.fc1 = tf.nn.dropout(self.fc1, self.keep_prob, seed=l5.seed)
 
-        self.fc_layer_2_size = int(self.fc1.shape[1])
-        self.fc2_weights = tf.Variable(
-            tf.truncated_normal(shape=(fc_layer_2_size, fc_layer_3_size), mean=mu, stddev=sigma, seed=self.seed))
-        self.fc2_biases = tf.Variable(tf.zeros(fc_layer_3_size))
-        self.fc2 = tf.matmul(self.fc1, self.fc2_weights) + self.fc2_biases
-        self.fc2 = tf.nn.relu(self.fc2)
-        self.fc2 = tf.nn.dropout(self.fc2, self.keep_prob, seed=self.seed)
+            if l5.distr_pos[3]:
+                if l5.verbose:
+                    logging.debug('Attached distr. before F2')
+                self.fc1 = tf.concat([self.fc1, self.batch_distr], axis=1)
 
-        if distr_pos[4]:
-            if self.verbose:
-                logging.debug('Attached distr. before F3')
-            self.fc2 = tf.concat([self.fc2, self.batch_distr], axis=1)
-            fc_layer_3_size += distr_size
-        self.output_weights = tf.Variable(
-            tf.truncated_normal(shape=(fc_layer_3_size, self.label_size), mean=mu, stddev=sigma, seed=self.seed))
-        output_biases = tf.Variable(tf.zeros(self.label_size))
-        logits = tf.matmul(self.fc2, self.output_weights) + output_biases
+            _fc_layer_2_size = int(self.fc1.shape[1])
+            self.fc2_weights = tf.Variable(
+                tf.truncated_normal(shape=(_fc_layer_2_size, _fc_layer_3_size), mean=_mu, stddev=_sigma, seed=l5.seed))
+            self.fc2_biases = tf.Variable(tf.zeros(_fc_layer_3_size))
+            self.fc2 = tf.matmul(self.fc1, self.fc2_weights) + self.fc2_biases
+            self.fc2 = tf.nn.relu(self.fc2)
+            self.fc2 = tf.nn.dropout(self.fc2, self.keep_prob, seed=l5.seed)
 
-        if self.verbose:
-            logging.info('Network layers size:\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}'.format(
-                x.get_shape().as_list(),
-                self.c1.get_shape().as_list(),
-                self.s1.get_shape().as_list(),
-                self.c2.get_shape().as_list(),
-                self.s2.get_shape().as_list(),
-                self.c1.get_shape().as_list(),
-                self.fc2.get_shape().as_list(),
-                logits.get_shape().as_list()))
+            if l5.distr_pos[4]:
+                if l5.verbose:
+                    logging.debug('Attached distr. before F3')
+                self.fc2 = tf.concat([self.fc2, self.batch_distr], axis=1)
+                _fc_layer_3_size += l5.num_classes
+            self.output_weights = tf.Variable(
+                tf.truncated_normal(shape=(_fc_layer_3_size, l5.dataset.num_classes), mean=_mu, stddev=_sigma,
+                                    seed=l5.seed))
+            output_biases = tf.Variable(tf.zeros(l5.dataset.num_classes))
+            self.tf_logits = tf.matmul(self.fc2, self.output_weights) + output_biases
 
-        return logits
+            if l5.verbose:
+                logging.info('Network layers size:\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}'.format(
+                    self.input_image.get_shape().as_list(),
+                    self.c1.get_shape().as_list(),
+                    self.s1.get_shape().as_list(),
+                    self.c2.get_shape().as_list(),
+                    self.s2.get_shape().as_list(),
+                    self.c1.get_shape().as_list(),
+                    self.fc2.get_shape().as_list(),
+                    self.tf_logits.get_shape().as_list()))
 
-    def _mlp(self, x, no_color_channels, variable_mean, variable_stddev, distr_pos):
-        """
-        Implementation of simple MLP architecture, with the possibility of attaching batch distribution
-        :param x: input images
-        :param no_color_channels:
-        :param variable_mean:
-        :param variable_stddev:
-        :return: the result of the last fully connected layer
-        """
-        # Hyperparameters
-        distr_size = self.dataset.num_classes
-        layer_1_size = self.dataset.image_size * self.dataset.image_size * no_color_channels
-        layer_2_size = 128
-        layer_3_size = 64
-        output_layer_size = self.label_size
-        mu = variable_mean
-        sigma = variable_stddev
-
-        # tile y_distr in order to attach it as input for network's layers
-        distr_to_concat_fc = tf.reshape(tf.tile(input=self.y_distr, multiples=[tf.shape(x)[0]]),
-                                        shape=[tf.shape(x)[0], distr_size])
-        self.batch_distr = distr_to_concat_fc
-
-        # implement network architecture
-        flatten_input = flatten(x)
-
-        if distr_pos[2]:
-            if self.verbose:
-                logging.debug('Attached distr. before F1')
-            flatten_input = tf.concat([flatten_input, distr_to_concat_fc], axis=1)
-
-        layer_1_size = int(flatten_input.shape[1])
-        self.fc1_weights = tf.Variable(
-            tf.truncated_normal(shape=(layer_1_size, layer_2_size), mean=mu, stddev=sigma, seed=self.seed))
-        self.fc1_biases = tf.Variable(tf.zeros(layer_2_size))
-        self.fc1 = tf.matmul(flatten_input, self.fc1_weights) + self.fc1_biases
-        self.fc1 = tf.nn.relu(self.fc1)
-        self.fc1 = tf.nn.dropout(self.fc1, self.keep_prob, seed=self.seed)
-
-        if distr_pos[3]:
-            if self.verbose:
-                logging.debug('Attached distr. before F2')
-            self.fc1 = tf.concat([self.fc1, distr_to_concat_fc], axis=1)
-
-        layer_2_size = int(self.fc1.shape[1])
-        self.fc2_weights = tf.Variable(
-            tf.truncated_normal(shape=(layer_2_size, layer_3_size), mean=mu, stddev=sigma, seed=self.seed))
-        self.fc2_biases = tf.Variable(tf.zeros(layer_3_size))
-        self.fc2 = tf.matmul(self.fc1, self.fc2_weights) + self.fc2_biases
-        self.fc2 = tf.nn.relu(self.fc2)
-        self.fc2 = tf.nn.dropout(self.fc2, self.keep_prob, seed=self.seed)
-
-        if distr_pos[4]:
-            if self.verbose:
-                logging.debug('Attached distr. before F3')
-            self.fc2 = tf.concat([self.fc2, distr_to_concat_fc], axis=1)
-            layer_3_size += distr_size
-        self.output_weights = tf.Variable(
-            tf.truncated_normal(shape=(layer_3_size, output_layer_size), mean=mu, stddev=sigma, seed=self.seed))
-        self.output_biases = tf.Variable(tf.zeros(output_layer_size))
-        logits = tf.matmul(self.fc2, self.output_weights) + self.output_biases
-
-        if self.verbose:
-            logging.info('Network layers size:\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}'.format(
-                x.get_shape().as_list(),
-                flatten_input.get_shape().as_list(),
-                self.fc1.get_shape().as_list(),
-                self.fc2.get_shape().as_list(),
-                logits.get_shape().as_list()))
-
-        return logits
+            # set optimizing settings
+            self.prediction_softmax = tf.nn.softmax(self.tf_logits)
+            self.loss_op = tf.reduce_mean(
+                tf.nn.softmax_cross_entropy_with_logits(labels=self.y, logits=self.tf_logits))
+            self.opt = tf.train.AdamOptimizer(learning_rate=l5.learning_rate)
+            self.train_loss_opt = self.opt.minimize(self.loss_op)
+            self.correct_prediction = tf.equal(tf.argmax(self.tf_logits, 1), tf.argmax(self.y, 1))
+            self.accuracy_op = tf.reduce_mean(tf.cast(self.correct_prediction, tf.float32))
 
     def eval_data(self, dataset, use_only_one_batch=True):
         if not use_only_one_batch:
@@ -274,14 +274,14 @@ class Lenet5WithDistr(object):
             num_examples = dataset.num_examples
         total_acc, total_loss = 0, 0
         sess = self.session
-        # tf.get_default_session()
         for step in range(steps_per_epoch):
             batch_x, batch_y = dataset.next_batch(validation_batch_size)
             batch_y_distr = np.bincount(np.argmax(batch_y, axis=1),
-                                        minlength=self.dataset.num_classes) / batch_y.shape[0]
-            loss, acc = sess.run([self.loss_op, self.accuracy_op], feed_dict={self.x: batch_x, self.y: batch_y,
-                                                                              self.y_distr: batch_y_distr,
-                                                                              self.keep_prob: 1.0})
+                                        minlength=self.num_classes) / batch_y.shape[0]
+            loss, acc = sess.run([self.graph.loss_op, self.graph.accuracy_op],
+                                 feed_dict={self.graph.input_image: batch_x, self.graph.y: batch_y,
+                                            self.graph.y_distr: batch_y_distr,
+                                            self.graph.keep_prob: 1.0})
             total_acc += (acc * batch_x.shape[0])
             total_loss += (loss * batch_x.shape[0])
         return total_loss / num_examples, total_acc / num_examples
@@ -299,18 +299,20 @@ class Lenet5WithDistr(object):
         total_predict, total_actual = [], []
         wrong_predict_images = []
         total_softmax_output_probs = None
-        # tf.get_default_session()
         sess = self.session
         for step in range(steps_per_epoch):
             batch_x, batch_y = dataset.next_batch(test_batch_size)
             if distr_to_attach is None:
                 batch_y_distr = np.bincount(np.argmax(batch_y, axis=1),
-                                            minlength=self.dataset.num_classes) / batch_y.shape[0]
+                                            minlength=self.num_classes) / batch_y.shape[0]
             else:
                 batch_y_distr = distr_to_attach
             loss, acc, predict, actual, logits = sess.run(
-                [self.loss_op, self.accuracy_op, tf.argmax(self.network, 1), tf.argmax(self.y, 1), self.network],
-                feed_dict={self.x: batch_x, self.y: batch_y, self.y_distr: batch_y_distr, self.keep_prob: 1.0})
+                [self.graph.loss_op, self.graph.accuracy_op, tf.argmax(self.graph.tf_logits, 1),
+                 tf.argmax(self.graph.y, 1),
+                 self.graph.tf_logits],
+                feed_dict={self.graph.input_image: batch_x, self.graph.y: batch_y, self.graph.y_distr: batch_y_distr,
+                           self.graph.keep_prob: 1.0})
 
             total_acc += (acc * batch_x.shape[0])
             total_loss += (loss * batch_x.shape[0])
@@ -324,24 +326,26 @@ class Lenet5WithDistr(object):
             for index in range(len(predict)):
                 if predict[index] != actual[index]:
                     wrong_predict_images.append(batch_x[index])
-        return total_loss / num_examples, total_acc / num_examples, total_predict.astype(np.int32), \
-               total_actual.astype(np.int32), wrong_predict_images, total_softmax_output_probs
+        return total_loss / num_examples, total_acc / num_examples, total_predict.astype(np.int32), total_actual.astype(
+            np.int32), wrong_predict_images, total_softmax_output_probs
 
-    def test_on_only_an_image(self, image, label, distr_to_attach=[0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
-                              get_output_probs=False):
+    def test_on_only_an_image(self, image, label, distr_to_attach=tuple([0.1] * 10), get_output_probs=False):
         batch_x = image[None, :, :, :]
         batch_y = label[None, :]
         loss, acc, predict, actual, logits = self.session.run(
-            [self.loss_op, self.accuracy_op, tf.argmax(self.network, 1), tf.argmax(self.y, 1), self.network],
-            feed_dict={self.x: batch_x, self.y: batch_y, self.y_distr: distr_to_attach, self.keep_prob: 1.0})
+            [self.graph.loss_op, self.graph.accuracy_op, tf.argmax(self.graph.tf_logits, 1),
+             tf.argmax(self.graph.y, 1),
+             self.graph.tf_logits],
+            feed_dict={self.graph.input_image: batch_x, self.graph.y: batch_y, self.graph.y_distr: distr_to_attach,
+                       self.graph.keep_prob: 1.0})
         if get_output_probs:
             softmax_output_probs = tf.Session().run(tf.nn.softmax(logits=logits))
             return loss, acc, predict.astype(np.int32), actual.astype(np.int32), softmax_output_probs
         else:
             return loss, acc, predict.astype(np.int32), actual.astype(np.int32)
 
-    def train(self, distrs_list=None, use_shuffling_inside_class=False, attach_imposed_distr=False):
-        # reset epoch_completed and indices_in_epoch fields from mnist dataset
+    def train(self):
+        # reset epoch_completed and indices_in_epoch fields from dataset
         # (in case if the same object is used for multiple trainings)
         self.dataset.train.reset_epochs_completed()
         self.dataset.train.reset_indices_in_epoch()
@@ -360,33 +364,36 @@ class Lenet5WithDistr(object):
                 self.dataset.train.shuffle()
                 total_tran_loss = 0.0
                 total_tran_acc = 0.0
-                # count how much examples are used effectively
+                # count how many examples are used effectively
                 # because when imposing a distribution not all the data is used in an epoch
                 concrete_num_examples_used_in_last_epoch = 0
 
                 # start building batches with one distribution chosen randomly from distr_list
-                if distrs_list is not None:
-                    k = self.dataset.train.rg.randint(low=0, high=len(distrs_list))
+                k = None
+                distr_to_impose = None
+                if self.distrs_list is not None:
+                    k = self.dataset.train.rg.randint(low=0, high=len(self.distrs_list))
                 for step in range(steps_per_epoch):
-                    if distrs_list is None:
+                    if self.distrs_list is None:
                         batch_x, batch_y = self.dataset.train.next_batch(self.batch_size)
                     else:
-                        distr_to_impose = distrs_list[k]
-                        k = (k + 1) % len(distrs_list)
+                        distr_to_impose = self.distrs_list[k]
+                        k = (k + 1) % len(self.distrs_list)
                         batch_x, batch_y = self.dataset.train.next_batch(self.batch_size, distr_to_impose,
-                                                                         use_shuffling_inside_class)
+                                                                         self.shuffle_inside_class)
                     batch_y_distr = np.bincount(np.argmax(batch_y, axis=1),
-                                                minlength=self.dataset.num_classes) / batch_y.shape[0]
+                                                minlength=self.num_classes) / batch_y.shape[0]
 
-                    if attach_imposed_distr:
+                    if self.attach_imposed_distr:
                         distr_to_attach = distr_to_impose
                     else:
                         distr_to_attach = batch_y_distr
 
                     _, train_loss, train_acc, batch_distr_out = self.session.run(
-                        [self.train_op, self.loss_op, self.accuracy_op, self.batch_distr],
-                        feed_dict={self.x: batch_x, self.y: batch_y, self.y_distr: distr_to_attach,
-                                   self.keep_prob: self.drop_out_keep_prob})
+                        [self.graph.train_loss_opt, self.graph.loss_op, self.graph.accuracy_op, self.graph.batch_distr],
+                        feed_dict={self.graph.input_image: batch_x, self.graph.y: batch_y,
+                                   self.graph.y_distr: distr_to_attach,
+                                   self.graph.keep_prob: self.drop_out_keep_prob})
 
                     total_tran_loss += (train_loss * batch_x.shape[0])
                     total_tran_acc += (train_acc * batch_x.shape[0])
@@ -401,9 +408,9 @@ class Lenet5WithDistr(object):
                 val_loss, val_acc = self.eval_data(self.dataset.validation)
                 logging.info(
                     "Epoch {:2d}/{:2d} --- Training: loss = {:.3f}, acc = {:.3f}; Validation: loss = {:.3f},"
-                    " acc = {:.3f}; num_examples_used = {}"
-                        .format(i + 1, self.epochs, total_tran_loss, total_tran_acc, val_loss, val_acc,
-                                concrete_num_examples_used_in_last_epoch))
+                    " acc = {:.3f}; num_examples_used = {}".format(i + 1, self.epochs, total_tran_loss, total_tran_acc,
+                                                                   val_loss, val_acc,
+                                                                   concrete_num_examples_used_in_last_epoch))
                 self.plotter.add_loss_accuracy_to_plot(i, total_tran_loss, total_tran_acc, val_loss, val_acc,
                                                        redraw=True)
 
@@ -420,7 +427,7 @@ class Lenet5WithDistr(object):
                 # before plotting, sort images by true target label
                 wrong_actual = total_actual[total_actual != total_predict]
                 wrong_predict_images = np.array(wrong_predict_images)
-                wrong_predict_images_sorted = wrong_predict_images[wrong_actual.argsort(),]
+                wrong_predict_images_sorted = wrong_predict_images[wrong_actual.argsort()]
                 wrong_predict_images_sorted = [image for image in wrong_predict_images_sorted]
                 self.plotter.combine_images(wrong_predict_images_sorted, self.file_name_wrong_predicts)
             except Exception as ex:
@@ -428,7 +435,8 @@ class Lenet5WithDistr(object):
         self.plotter.safe_shut_down()
 
     def predict_images(self, images):
-        return self.session.run(self.prediction_softmax, feed_dict={self.x: images, self.keep_prob: 1.0})
+        return self.session.run(self.graph.prediction_softmax,
+                                feed_dict={self.graph.input_image: images, self.graph.keep_prob: 1.0})
 
     def restore_session(self, ckpt_dir, ckpt_filename=None):
         """
@@ -438,14 +446,14 @@ class Lenet5WithDistr(object):
         :param ckpt_filename: try to restore model with this checkpoint file name; if is None, restore a model using
                               latest_checkpoint method from ckpt_dir directory
         """
-        dir = os.path.dirname(ckpt_dir)
+        _dir = os.path.dirname(ckpt_dir)
 
         # check if directory  ckpt_dir exists
-        if not os.path.exists(dir):
+        if not os.path.exists(_dir):
             logging.error('Directory {} not found.'.format(ckpt_dir))
         else:
             # train_distr was introduced later so we will try to restore as much we can from the checkpoint file
-            reader = tf.train.NewCheckpointReader(os.path.join(dir, ckpt_filename))
+            reader = tf.train.NewCheckpointReader(os.path.join(_dir, ckpt_filename))
             vars_to_restore = []
             for var in tf.global_variables():
                 var_name = var.name.split(':')[0]
@@ -459,6 +467,6 @@ class Lenet5WithDistr(object):
             self.session = tf.Session()
 
             if ckpt_filename is not None:
-                saver.restore(sess=self.session, save_path=os.path.join(dir, ckpt_filename))
+                saver.restore(sess=self.session, save_path=os.path.join(_dir, ckpt_filename))
             else:
                 saver.restore(sess=self.session, save_path=tf.train.latest_checkpoint(ckpt_dir))
