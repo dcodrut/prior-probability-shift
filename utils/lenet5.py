@@ -32,6 +32,7 @@ class Lenet5(object):
         self.plotter = TrainingPlotter(title, self.file_name, show_plot_window=show_plot_window)
 
         self.mnist_dataset = mnist_dataset
+        self.seed = self.mnist_dataset.train.seed
         self.epochs = epochs
         self.batch_size = batch_size
         self.label_size = mnist_dataset.num_classes
@@ -80,45 +81,47 @@ class Lenet5(object):
         mu = variable_mean
         sigma = variable_stddev
 
-        c1_weights = tf.Variable(
+        self.c1_weights = tf.Variable(
             tf.truncated_normal(shape=(patch_size, patch_size, color_channel, conv_layer_1_depth), mean=mu,
-                                stddev=sigma))
-        c1_biases = tf.Variable(tf.zeros(conv_layer_1_depth))
-        c1 = tf.nn.conv2d(x, c1_weights, strides=[1, 1, 1, 1], padding='SAME') + c1_biases
-        c1 = tf.nn.relu(c1)
+                                stddev=sigma, seed=self.seed))
+        self.c1_biases = tf.Variable(tf.zeros(conv_layer_1_depth))
+        self.c1 = tf.nn.conv2d(x, self.c1_weights, strides=[1, 1, 1, 1], padding='SAME') + self.c1_biases
+        self.c1 = tf.nn.relu(self.c1)
 
-        s2 = tf.nn.max_pool(c1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+        self.s2 = tf.nn.max_pool(self.c1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
         # s2 = tf.nn.dropout(s2, self.keep_prob, seed=self.mnist_dataset.train.seed)
 
-        c3_weights = tf.Variable(
+        self.c3_weights = tf.Variable(
             tf.truncated_normal(shape=(patch_size, patch_size, conv_layer_1_depth, conv_layer_2_depth), mean=mu,
-                                stddev=sigma))
-        c3_biases = tf.Variable(tf.zeros(conv_layer_2_depth))
-        c3 = tf.nn.conv2d(s2, c3_weights, strides=[1, 1, 1, 1], padding='VALID') + c3_biases
-        c3 = tf.nn.relu(c3)
+                                stddev=sigma, seed=self.seed))
+        self.c3_biases = tf.Variable(tf.zeros(conv_layer_2_depth))
+        self.c3 = tf.nn.conv2d(self.s2, self.c3_weights, strides=[1, 1, 1, 1], padding='VALID') + self.c3_biases
+        self.c3 = tf.nn.relu(self.c3)
 
-        s4 = tf.nn.max_pool(c3, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+        self.s4 = tf.nn.max_pool(self.c3, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
         # s4 = tf.nn.dropout(s4, self.keep_prob, seed=self.mnist_dataset.train.seed)
-        s4_flatten = flatten(s4)
+        self.s4_flatten = flatten(self.s4)
 
-        fc_layer_1_size = int(s4_flatten.shape[1])
-        f5_weights = tf.Variable(tf.truncated_normal(shape=(fc_layer_1_size, fc_layer_2_size), mean=mu, stddev=sigma))
-        f5_biases = tf.Variable(tf.zeros(fc_layer_2_size))
-        f5 = tf.matmul(s4_flatten, f5_weights) + f5_biases
-        f5 = tf.nn.relu(f5)
-        f5 = tf.nn.dropout(f5, self.keep_prob, seed=self.mnist_dataset.train.seed)
+        self.fc_layer_1_size = int(self.s4_flatten.shape[1])
+        self.f5_weights = tf.Variable(
+            tf.truncated_normal(shape=(fc_layer_1_size, fc_layer_2_size), mean=mu, stddev=sigma, seed=self.seed))
+        self.f5_biases = tf.Variable(tf.zeros(fc_layer_2_size))
+        self.f5 = tf.matmul(self.s4_flatten, self.f5_weights) + self.f5_biases
+        self.f5 = tf.nn.relu(self.f5)
+        self.f5 = tf.nn.dropout(self.f5, self.keep_prob, seed=self.seed)
 
-        fc_layer_2_size = int(f5.shape[1])
-        f6_weights = tf.Variable(tf.truncated_normal(shape=(fc_layer_2_size, fc_layer_3_size), mean=mu, stddev=sigma))
-        f6_biases = tf.Variable(tf.zeros(fc_layer_3_size))
-        f6 = tf.matmul(f5, f6_weights) + f6_biases
-        f6 = tf.nn.relu(f6)
-        f6 = tf.nn.dropout(f6, self.keep_prob, seed=self.mnist_dataset.train.seed)
+        self.fc_layer_2_size = int(self.f5.shape[1])
+        self.f6_weights = tf.Variable(
+            tf.truncated_normal(shape=(fc_layer_2_size, fc_layer_3_size), mean=mu, stddev=sigma, seed=self.seed))
+        self.f6_biases = tf.Variable(tf.zeros(fc_layer_3_size))
+        self.f6 = tf.matmul(self.f5, self.f6_weights) + self.f6_biases
+        self.f6 = tf.nn.relu(self.f6)
+        self.f6 = tf.nn.dropout(self.f6, self.keep_prob, seed=self.seed)
 
-        output_weights = tf.Variable(
-            tf.truncated_normal(shape=(fc_layer_3_size, self.label_size), mean=mu, stddev=sigma))
-        output_biases = tf.Variable(tf.zeros(self.label_size))
-        logits = tf.matmul(f6, output_weights) + output_biases
+        self.output_weights = tf.Variable(
+            tf.truncated_normal(shape=(fc_layer_3_size, self.label_size), mean=mu, stddev=sigma, seed=self.seed))
+        self.output_biases = tf.Variable(tf.zeros(self.label_size))
+        logits = tf.matmul(self.f6, self.output_weights) + self.output_biases
 
         return logits
 
@@ -197,6 +200,7 @@ class Lenet5(object):
                     _, train_loss, train_acc = self.session.run(
                         [self.train_op, self.loss_op, self.accuracy_op],
                         feed_dict={self.x: batch_x, self.y: batch_y, self.keep_prob: self.drop_out_keep_prob})
+
                     total_tran_loss += (train_loss * batch_x.shape[0])
                     total_tran_acc += (train_acc * batch_x.shape[0])
 

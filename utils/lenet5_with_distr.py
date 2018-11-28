@@ -42,6 +42,7 @@ class Lenet5WithDistr(object):
                                        file_name=self.file_name_learning_curve, show_plot_window=show_plot_window)
 
         self.dataset = dataset
+        self.seed = self.dataset.train.seed
         self.epochs = epochs
         self.batch_size = batch_size
         self.label_size = dataset.num_classes
@@ -98,93 +99,94 @@ class Lenet5WithDistr(object):
         sigma = variable_stddev
 
         # tile y_distr in order to attach it as input for network's layers
-        distr_to_concat_fc = tf.reshape(tf.tile(input=self.y_distr, multiples=[tf.shape(x)[0]]),
-                                        shape=[tf.shape(x)[0], distr_size])
-        self.batch_distr = distr_to_concat_fc
+        self.batch_distr = tf.reshape(tf.tile(input=self.y_distr, multiples=[tf.shape(x)[0]]),
+                                      shape=[tf.shape(x)[0], distr_size])
+        # self.batch_distr = batch_distr
         # implement network architecture
-        c1_weights = tf.Variable(
+        self.c1_weights = tf.Variable(
             tf.truncated_normal(shape=(patch_size, patch_size, color_channel, conv_layer_1_depth), mean=mu,
-                                stddev=sigma))
-        c1_biases = tf.Variable(tf.zeros(conv_layer_1_depth))
+                                stddev=sigma, seed=self.seed))
+        self.c1_biases = tf.Variable(tf.zeros(conv_layer_1_depth))
         if distr_pos[0]:
             if self.verbose:
                 logging.debug('Attached distr. before C1 (at input)')
-            temp = tf.concat([tf.zeros(x.shape[2] - distr_to_concat_fc.shape[1]), self.y_distr], axis=0)
+            temp = tf.concat([tf.zeros(x.shape[2] - self.batch_distr.shape[1]), self.y_distr], axis=0)
             distr_to_concat_c = tf.reshape(tf.tile(input=temp, multiples=[tf.shape(x)[0]]),
                                            shape=[tf.shape(x)[0], 1, int(temp.shape[0]), 1])
             x = tf.concat([x, distr_to_concat_c], axis=1)
-        c1 = tf.nn.conv2d(x, c1_weights, strides=[1, 1, 1, 1], padding='SAME') + c1_biases
-        c1 = tf.nn.relu(c1)
+        self.c1 = tf.nn.conv2d(x, self.c1_weights, strides=[1, 1, 1, 1], padding='SAME') + self.c1_biases
+        self.c1 = tf.nn.relu(self.c1)
 
-        s1 = tf.nn.max_pool(c1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+        self.s1 = tf.nn.max_pool(self.c1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
         # s1 = tf.nn.dropout(s1, self.keep_prob, seed=self.mnist_dataset.train.seed)
 
-        c2_weights = tf.Variable(
+        self.c2_weights = tf.Variable(
             tf.truncated_normal(shape=(patch_size, patch_size, conv_layer_1_depth, conv_layer_2_depth), mean=mu,
-                                stddev=sigma))
-        c2_biases = tf.Variable(tf.zeros(conv_layer_2_depth))
+                                stddev=sigma, seed=self.seed))
+        self.c2_biases = tf.Variable(tf.zeros(conv_layer_2_depth))
 
         if distr_pos[1]:
             if self.verbose:
                 logging.debug('Attached distr. before C2')
-            temp = tf.concat([tf.zeros(s1.shape[2] - distr_to_concat_fc.shape[1]), self.y_distr], axis=0)
-            distr_to_concat_c = tf.reshape(tf.tile(input=temp, multiples=[tf.shape(s1)[0]]),
-                                           shape=[tf.shape(s1)[0], 1, int(temp.shape[0])])
+            temp = tf.concat([tf.zeros(self.s1.shape[2] - self.batch_distr.shape[1]), self.y_distr], axis=0)
+            self.distr_to_concat_c = tf.reshape(tf.tile(input=temp, multiples=[tf.shape(self.s1)[0]]),
+                                                shape=[tf.shape(self.s1)[0], 1, int(temp.shape[0])])
             new_s1 = []
-            for i in range(s1.shape[3]):
-                new_s1.append(tf.concat([s1[:, :, :, i], distr_to_concat_c], axis=1))
-            s1 = tf.stack(new_s1, axis=3)
+            for i in range(self.s1.shape[3]):
+                new_s1.append(tf.concat([self.s1[:, :, :, i], self.distr_to_concat_c], axis=1))
+            self.s1 = tf.stack(new_s1, axis=3)
+        self.c2 = tf.nn.conv2d(self.s1, self.c2_weights, strides=[1, 1, 1, 1], padding='VALID') + self.c2_biases
+        self.c2 = tf.nn.relu(self.c2)
 
-        c2 = tf.nn.conv2d(s1, c2_weights, strides=[1, 1, 1, 1], padding='VALID') + c2_biases
-        c2 = tf.nn.relu(c2)
-
-        s2 = tf.nn.max_pool(c2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+        self.s2 = tf.nn.max_pool(self.c2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
         # s2 = tf.nn.dropout(s2, self.keep_prob, seed=self.mnist_dataset.train.seed)
-        s2 = flatten(s2)
+        self.s2 = flatten(self.s2)
 
         if distr_pos[2]:
             if self.verbose:
                 logging.debug('Attached distr. before F1')
-            s2 = tf.concat([s2, distr_to_concat_fc], axis=1)
+            self.s2 = tf.concat([self.s2, self.batch_distr], axis=1)
 
-        fc_layer_1_size = int(s2.shape[1])
-        fc1_weights = tf.Variable(tf.truncated_normal(shape=(fc_layer_1_size, fc_layer_2_size), mean=mu, stddev=sigma))
-        fc1_biases = tf.Variable(tf.zeros(fc_layer_2_size))
-        fc1 = tf.matmul(s2, fc1_weights) + fc1_biases
-        fc1 = tf.nn.relu(fc1)
-        fc1 = tf.nn.dropout(fc1, self.keep_prob, seed=self.dataset.train.seed)
+        fc_layer_1_size = int(self.s2.shape[1])
+        self.fc1_weights = tf.Variable(
+            tf.truncated_normal(shape=(fc_layer_1_size, fc_layer_2_size), mean=mu, stddev=sigma, seed=self.seed))
+        self.fc1_biases = tf.Variable(tf.zeros(fc_layer_2_size))
+        self.fc1 = tf.matmul(self.s2, self.fc1_weights) + self.fc1_biases
+        self.fc1 = tf.nn.relu(self.fc1)
+        self.fc1 = tf.nn.dropout(self.fc1, self.keep_prob, seed=self.seed)
 
         if distr_pos[3]:
             if self.verbose:
                 logging.debug('Attached distr. before F2')
-            fc1 = tf.concat([fc1, distr_to_concat_fc], axis=1)
+            self.fc1 = tf.concat([self.fc1, self.batch_distr], axis=1)
 
-        fc_layer_2_size = int(fc1.shape[1])
-        fc2_weights = tf.Variable(tf.truncated_normal(shape=(fc_layer_2_size, fc_layer_3_size), mean=mu, stddev=sigma))
-        fc2_biases = tf.Variable(tf.zeros(fc_layer_3_size))
-        fc2 = tf.matmul(fc1, fc2_weights) + fc2_biases
-        fc2 = tf.nn.relu(fc2)
-        fc2 = tf.nn.dropout(fc2, self.keep_prob, seed=self.dataset.train.seed)
+        self.fc_layer_2_size = int(self.fc1.shape[1])
+        self.fc2_weights = tf.Variable(
+            tf.truncated_normal(shape=(fc_layer_2_size, fc_layer_3_size), mean=mu, stddev=sigma, seed=self.seed))
+        self.fc2_biases = tf.Variable(tf.zeros(fc_layer_3_size))
+        self.fc2 = tf.matmul(self.fc1, self.fc2_weights) + self.fc2_biases
+        self.fc2 = tf.nn.relu(self.fc2)
+        self.fc2 = tf.nn.dropout(self.fc2, self.keep_prob, seed=self.seed)
 
         if distr_pos[4]:
             if self.verbose:
                 logging.debug('Attached distr. before F3')
-            fc2 = tf.concat([fc2, distr_to_concat_fc], axis=1)
+            self.fc2 = tf.concat([self.fc2, self.batch_distr], axis=1)
             fc_layer_3_size += distr_size
-        output_weights = tf.Variable(
-            tf.truncated_normal(shape=(fc_layer_3_size, self.label_size), mean=mu, stddev=sigma))
+        self.output_weights = tf.Variable(
+            tf.truncated_normal(shape=(fc_layer_3_size, self.label_size), mean=mu, stddev=sigma, seed=self.seed))
         output_biases = tf.Variable(tf.zeros(self.label_size))
-        logits = tf.matmul(fc2, output_weights) + output_biases
+        logits = tf.matmul(self.fc2, self.output_weights) + output_biases
 
         if self.verbose:
             logging.info('Network layers size:\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}'.format(
                 x.get_shape().as_list(),
-                c1.get_shape().as_list(),
-                s1.get_shape().as_list(),
-                c2.get_shape().as_list(),
-                s2.get_shape().as_list(),
-                fc1.get_shape().as_list(),
-                fc2.get_shape().as_list(),
+                self.c1.get_shape().as_list(),
+                self.s1.get_shape().as_list(),
+                self.c2.get_shape().as_list(),
+                self.s2.get_shape().as_list(),
+                self.c1.get_shape().as_list(),
+                self.fc2.get_shape().as_list(),
                 logits.get_shape().as_list()))
 
         return logits
@@ -221,40 +223,42 @@ class Lenet5WithDistr(object):
             flatten_input = tf.concat([flatten_input, distr_to_concat_fc], axis=1)
 
         layer_1_size = int(flatten_input.shape[1])
-        fc1_weights = tf.Variable(tf.truncated_normal(shape=(layer_1_size, layer_2_size), mean=mu, stddev=sigma))
-        fc1_biases = tf.Variable(tf.zeros(layer_2_size))
-        fc1 = tf.matmul(flatten_input, fc1_weights) + fc1_biases
-        fc1 = tf.nn.relu(fc1)
-        fc1 = tf.nn.dropout(fc1, self.keep_prob, seed=self.dataset.train.seed)
+        self.fc1_weights = tf.Variable(
+            tf.truncated_normal(shape=(layer_1_size, layer_2_size), mean=mu, stddev=sigma, seed=self.seed))
+        self.fc1_biases = tf.Variable(tf.zeros(layer_2_size))
+        self.fc1 = tf.matmul(flatten_input, self.fc1_weights) + self.fc1_biases
+        self.fc1 = tf.nn.relu(self.fc1)
+        self.fc1 = tf.nn.dropout(self.fc1, self.keep_prob, seed=self.seed)
 
         if distr_pos[3]:
             if self.verbose:
                 logging.debug('Attached distr. before F2')
-            fc1 = tf.concat([fc1, distr_to_concat_fc], axis=1)
+            self.fc1 = tf.concat([self.fc1, distr_to_concat_fc], axis=1)
 
-        layer_2_size = int(fc1.shape[1])
-        fc2_weights = tf.Variable(tf.truncated_normal(shape=(layer_2_size, layer_3_size), mean=mu, stddev=sigma))
-        fc2_biases = tf.Variable(tf.zeros(layer_3_size))
-        fc2 = tf.matmul(fc1, fc2_weights) + fc2_biases
-        fc2 = tf.nn.relu(fc2)
-        fc2 = tf.nn.dropout(fc2, self.keep_prob, seed=self.dataset.train.seed)
+        layer_2_size = int(self.fc1.shape[1])
+        self.fc2_weights = tf.Variable(
+            tf.truncated_normal(shape=(layer_2_size, layer_3_size), mean=mu, stddev=sigma, seed=self.seed))
+        self.fc2_biases = tf.Variable(tf.zeros(layer_3_size))
+        self.fc2 = tf.matmul(self.fc1, self.fc2_weights) + self.fc2_biases
+        self.fc2 = tf.nn.relu(self.fc2)
+        self.fc2 = tf.nn.dropout(self.fc2, self.keep_prob, seed=self.seed)
 
         if distr_pos[4]:
             if self.verbose:
                 logging.debug('Attached distr. before F3')
-            fc2 = tf.concat([fc2, distr_to_concat_fc], axis=1)
+            self.fc2 = tf.concat([self.fc2, distr_to_concat_fc], axis=1)
             layer_3_size += distr_size
-        output_weights = tf.Variable(
-            tf.truncated_normal(shape=(layer_3_size, output_layer_size), mean=mu, stddev=sigma))
-        output_biases = tf.Variable(tf.zeros(output_layer_size))
-        logits = tf.matmul(fc2, output_weights) + output_biases
+        self.output_weights = tf.Variable(
+            tf.truncated_normal(shape=(layer_3_size, output_layer_size), mean=mu, stddev=sigma, seed=self.seed))
+        self.output_biases = tf.Variable(tf.zeros(output_layer_size))
+        logits = tf.matmul(self.fc2, self.output_weights) + self.output_biases
 
         if self.verbose:
             logging.info('Network layers size:\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}'.format(
                 x.get_shape().as_list(),
                 flatten_input.get_shape().as_list(),
-                fc1.get_shape().as_list(),
-                fc2.get_shape().as_list(),
+                self.fc1.get_shape().as_list(),
+                self.fc2.get_shape().as_list(),
                 logits.get_shape().as_list()))
 
         return logits
