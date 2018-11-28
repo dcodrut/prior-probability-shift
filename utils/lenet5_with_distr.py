@@ -8,6 +8,8 @@ from tensorflow.contrib.layers import flatten
 from utils import utils
 from utils.training_plotter import TrainingPlotter
 
+import json
+
 logging.config.fileConfig('logging.conf')
 
 
@@ -485,7 +487,62 @@ class Lenet5WithDistr(object):
                 self.plotter.combine_images(wrong_predict_images_sorted, self.file_name_wrong_predicts)
             except Exception as ex:
                 logging.error("Failed when plotting wrong predicted images:\n" + str(ex))
-        self.plotter.safe_shut_down()
+
+            self.plotter.safe_shut_down()
+
+            # save all run instance details
+            self._save_run_instance_details()
+
+    def _save_run_instance_details(self):
+        # gather all hyperparameters
+        hp = {
+            'epochs': self.epochs,
+            'batch_size': self.batch_size,
+            'variable_mean': self.variable_mean,
+            'variable_stddev': self.variable_stddev,
+            'learning_rate': self.learning_rate,
+            'drop_out_keep_prob': self.drop_out_keep_prob,
+            'distr_pos': list(self.distr_pos),
+            'attach_imposed_distr': self.attach_imposed_distr,
+            'distrs_list': [list(distr) for distr in self.distrs_list],
+            'shuffle_inside_class': self.shuffle_inside_class
+        }
+
+        # gather all settings
+        settings = {
+            'seed': self.seed,
+            'save_root_dir': self.save_root_dir,
+            'model_name': self.model_name,
+            'show_plot_window': self.show_plot_window,
+            'verbose': self.verbose,
+            'hyperparameters': hp
+        }
+
+        # save performance metrics
+        train_loss, train_acc = self.eval_data(self.dataset.train)
+        validation_loss, validation_acc = self.eval_data(self.dataset.validation)
+        test_loss, test_acc = self.eval_data(self.dataset.test)
+
+        perf = {
+            'train_loss': train_loss,
+            'train_acc': train_acc,
+            'validation_loss': validation_loss,
+            'validation_acc': validation_acc,
+            'test_loss': test_loss,
+            'test_acc': test_acc,
+        }
+
+        to_save = {
+            'timestamp': self.ts,
+            'performance_metrics': perf,
+            'dataset_summary': self.dataset.summary,
+            'settings': settings,
+        }
+
+        fn = '{}/run_details.json'.format(self.save_dir)
+        with open(fn, 'w') as fp:
+            json.dump(to_save, fp, indent=4)
+            logging.info("Run instance '{}' details successfully saved to file '{}'.".format(self.ts, fn))
 
     def predict_images(self, images):
         return self.session.run(self.graph.prediction_softmax,
