@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+import time
 
 import numpy as np
 import tensorflow as tf
@@ -30,8 +31,24 @@ def concat_images(images, image_size, num_images_on_x, num_images_on_y):
     return big_image
 
 
+def now_as_ts():
+    return time.time()
+
+
 def now_as_str():
     return "{:%Y_%m_%d---%H_%M}".format(datetime.now())
+
+
+def now_as_str_f():
+    return "{:%Y_%m_%d---%H_%M_%f}".format(datetime.now())
+
+
+def ts_to_str(ts):
+    return "{:%Y_%m_%d---%H_%M}".format(datetime.fromtimestamp(ts))
+
+
+def ts_to_str_f(ts):
+    return "{:%Y_%m_%d---%H_%M_%f}".format(datetime.fromtimestamp(ts))
 
 
 def dense_to_one_hot(labels_dense, num_classes):
