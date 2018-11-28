@@ -132,6 +132,59 @@ class Lenet5WithDistr(object):
         self.plotter = TrainingPlotter(title="{}_{}".format(self.__class__.__name__, self.model_name),
                                        file_name=self.file_name_learning_curve, show_plot_window=self.show_plot_window)
 
+    @staticmethod
+    def get_run_with_settings(dataset, settings):
+        """
+        :param dataset: the dataset containing train/validation/test data
+        :param settings: a dictionary containing the settings (e.g. save_dir, model_name)
+                         and the hyperparameters for the Lenet5WithDistr model
+        :return: an instance of the model with the given parameters
+        # """
+
+        # read settings
+        seed = Lenet5WithDistr._get_value(settings, 'seed', Lenet5WithDistr.DEFAULT_SEED)
+        save_root_dir = Lenet5WithDistr._get_value(settings, 'save_root_dir', Lenet5WithDistr.DEFAULT_SAVE_ROOT_DIR)
+        model_name = Lenet5WithDistr._get_value(settings, 'model_name', Lenet5WithDistr.DEFAULT_MODEL_NAME)
+        show_plot_window = Lenet5WithDistr._get_value(settings, 'show_plot_window',
+                                                      Lenet5WithDistr.DEFAULT_SHOW_PLOT_WINDOW)
+        verbose = Lenet5WithDistr._get_value(settings, 'verbose', Lenet5WithDistr.DEFAULT_VERBOSE)
+
+        # read hyperparameters
+        hp = Lenet5WithDistr._get_value(settings, 'hyperparameters', None)
+        if hp is None:
+            logging.warning('All hyperparameters will be set to default.')
+            return Lenet5WithDistr(dataset, save_root_dir=save_root_dir, model_name=model_name,
+                                   show_plot_window=show_plot_window, verbose=verbose)
+
+        epochs = Lenet5WithDistr._get_value(hp, 'epochs', Lenet5WithDistr.DEFAULT_NO_EPOCHS)
+        batch_size = Lenet5WithDistr._get_value(hp, 'batch_size', Lenet5WithDistr.DEFAULT_BATCH_SIZE)
+        variable_mean = Lenet5WithDistr._get_value(hp, 'variable_mean', Lenet5WithDistr.DEFAULT_VARIABLE_MEAN)
+        variable_stddev = Lenet5WithDistr._get_value(hp, 'variable_stddev', Lenet5WithDistr.DEFAULT_VARIABLE_STDDEV)
+        learning_rate = Lenet5WithDistr._get_value(hp, 'learning_rate', Lenet5WithDistr.DEFAULT_LEARNING_RATE)
+        drop_out_keep_prob = Lenet5WithDistr._get_value(hp, 'drop_out_keep_prob',
+                                                        Lenet5WithDistr.DEFAULT_DROPOUT_KEEP_PROB)
+        distr_pos = Lenet5WithDistr._get_value(hp, 'distr_pos', Lenet5WithDistr.DEFAULT_DISTR_POS)
+        attach_imposed_distr = Lenet5WithDistr._get_value(hp, 'attach_imposed_distr',
+                                                          Lenet5WithDistr.DEFAULT_ATTACH_IMPOSED_DISTR)
+        distrs_list = Lenet5WithDistr._get_value(hp, 'distrs_list', Lenet5WithDistr.DEFAULT_DISTR_LIST)
+        shuffle_inside_class = Lenet5WithDistr._get_value(hp, 'shuffle_inside_class',
+                                                          Lenet5WithDistr.DEFAULT_SHUFFLE_INSIDE_CLASS)
+
+        return Lenet5WithDistr(dataset, save_root_dir=save_root_dir, model_name=model_name,
+                               show_plot_window=show_plot_window, verbose=verbose, epochs=epochs, batch_size=batch_size,
+                               variable_mean=variable_mean, variable_stddev=variable_stddev,
+                               learning_rate=learning_rate, drop_out_keep_prob=drop_out_keep_prob, distr_pos=distr_pos,
+                               attach_imposed_distr=attach_imposed_distr, distrs_list=distrs_list,
+                               shuffle_inside_class=shuffle_inside_class, seed=seed)
+
+    @staticmethod
+    def _get_value(settings, key, default):
+        try:
+            return settings[key]
+        except KeyError:
+            logging.warning("Key '{}' not found in settings; the default value ({}) will be used.".format(key, default))
+            return default
+
     class TfGraph:
         """
         Implements all the operations in the current graph, corresponding to Lenet5 architecture and appends the
@@ -448,7 +501,7 @@ class Lenet5WithDistr(object):
         """
         _dir = os.path.dirname(ckpt_dir)
 
-        # check if directory  ckpt_dir exists
+        # check if directory ckpt_dir exists
         if not os.path.exists(_dir):
             logging.error('Directory {} not found.'.format(ckpt_dir))
         else:
