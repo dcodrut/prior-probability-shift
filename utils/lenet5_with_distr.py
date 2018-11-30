@@ -103,8 +103,6 @@ class Lenet5WithDistr(object):
         self.num_classes = self.dataset.num_classes
         self.labels_name = [str(i) for i in range(self.num_classes)]
 
-        self._prepare_files()
-
         # build the computational graph
         self.graph = self.TfGraph(self)
 
@@ -118,7 +116,7 @@ class Lenet5WithDistr(object):
     def _prepare_files(self):
         # check if the save root directory exists, otherwise create it
         if not os.path.isdir(self.save_root_dir):
-            os.mkdir(self.save_root_dir)
+            os.makedirs(self.save_root_dir)
 
         # make a dir inside the save root directory for the current run instance
         self.save_dir = os.path.join(self.save_root_dir, str(self.ts))
@@ -400,6 +398,8 @@ class Lenet5WithDistr(object):
             return loss, acc, predict.astype(np.int32), actual.astype(np.int32)
 
     def train(self):
+        self._prepare_files()
+
         # reset epoch_completed and indices_in_epoch fields from dataset
         # (in case if the same object is used for multiple trainings)
         self.dataset.train.reset_epochs_completed()
@@ -504,7 +504,7 @@ class Lenet5WithDistr(object):
             'drop_out_keep_prob': self.drop_out_keep_prob,
             'distr_pos': list(self.distr_pos),
             'attach_imposed_distr': self.attach_imposed_distr,
-            'distrs_list': [list(distr) for distr in self.distrs_list],
+            'distrs_list': [list(distr) for distr in self.distrs_list] if self.distrs_list is not None else None,
             'shuffle_inside_class': self.shuffle_inside_class
         }
 
@@ -532,10 +532,29 @@ class Lenet5WithDistr(object):
             'test_acc': test_acc,
         }
 
+        # save dataset information
+        dataset_info = {
+            'train': {
+                'X_shape': list(self.dataset.train.images.shape),
+                'y_shape': list(self.dataset.train.labels.shape),
+                'y_distr': list(self.dataset.train.label_distr)
+            },
+            'validation': {
+                'X_shape': list(self.dataset.validation.images.shape),
+                'y_shape': list(self.dataset.validation.labels.shape),
+                'y_distr': list(self.dataset.validation.label_distr)
+            },
+            'test': {
+                'X_shape': list(self.dataset.test.images.shape),
+                'y_shape': list(self.dataset.test.labels.shape),
+                'y_distr': list(self.dataset.test.label_distr)
+            }
+        }
+
         to_save = {
             'timestamp': self.ts,
             'performance_metrics': perf,
-            'dataset_summary': self.dataset.summary,
+            'dataset_info': dataset_info,
             'settings': settings,
         }
 
@@ -556,7 +575,8 @@ class Lenet5WithDistr(object):
         :param ckpt_filename: try to restore model with this checkpoint file name; if is None, restore a model using
                               latest_checkpoint method from ckpt_dir directory
         """
-        _dir = os.path.dirname(ckpt_dir)
+        # _dir = os.path.dirname(ckpt_dir)
+        _dir = ckpt_dir
 
         # check if directory ckpt_dir exists
         if not os.path.exists(_dir):
